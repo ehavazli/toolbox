@@ -1,4 +1,5 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2
+#Author: Emre Havazli
 
 import os
 import sys
@@ -12,13 +13,13 @@ def main(argv):
   except:
     print '''
     *******************************************
-       
+
        Usage: residual_velocity.py velocityFile1 velocityFile2 (File1 - File2)
 
               if you want to add the residuals to a velocity file introduce add argument
-  
-              residual_velocity.py velocityFile1 velocityFile2 add 
-    *******************************************         
+
+              residual_velocity.py velocityFile1 velocityFile2 add
+    *******************************************
     '''
     sys.exit(1)
 
