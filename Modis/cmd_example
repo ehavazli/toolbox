@@ -1,0 +1,1 @@
+troposphere_uncertainty.py --steps 'all' --source MODIS --start 2002-01-01 --end 2003-01-01 -t 17:00:00 -b '33.0 35.5 -118.0 -116.0' --sar_dates sar_dates.txt --incidence_angle 23.0 --reference_pixel '35.0 -117.0' --sar_dates '20020101,20020304,20030404,20040101,20060101,20070102'

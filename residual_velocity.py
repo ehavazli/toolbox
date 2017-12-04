@@ -31,8 +31,9 @@ def main(argv):
   dset  = g['velocity'].get('velocity')
   second_velocity = dset[0:dset.shape[0]]
   residual_val = first_velocity - second_velocity
-  if argv[3] == 'add':
-     residual_val = first_velocity - second_velocity
+#  if argv[3] == 'add':
+#     residual_val = first_velocity - second_velocity
+#  else: pass
   k = h5py.File('residual_velocity.h5','w')
   gg = k.create_group('velocity')
   dset = gg.create_dataset('velocity', data=residual_val, compression='gzip')
