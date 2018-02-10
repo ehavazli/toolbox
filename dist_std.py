@@ -49,6 +49,7 @@ def main(argv):
                 plt.axis([0, 350,0, 2])
                 plt.plot(dist/1000.0,std_val*10000.0, '*',c=c)
     plt.savefig(directory+'/STDvsDIST.png',bbox_inches="tight")
+    plt.close()
 
             # out_file = open(directory+'std_dst_'+years+'_'+str(y)+'_'+str(s_y)+'-''+str(s_x)+'.txt', 'w')
             # std_pix_ar = array(std_pix)*float(10000.0)
