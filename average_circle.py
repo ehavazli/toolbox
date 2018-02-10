@@ -23,12 +23,12 @@ def main(argv):
     *******************************************
     '''
         sys.exit(1)
-    
+
     f = h5py.File(velocityfile,'r')
-    dset = f['velocity'].get('velocity')    
+    dset = f['velocity'].get('velocity')
     velocity = asarray(dset)
     ref_vel = velocity[y][x]
-    print 'REF VEL: ' + str(ref_vel)
+#    print 'REF VEL: ' + str(ref_vel)
     atr = readfile.read_attribute(velocityfile)
     crc_mask = ut.circle_index(atr,(y,x,radius))
     masked_vel = velocity[crc_mask]
@@ -42,5 +42,3 @@ def main(argv):
 ###########################
 if __name__ == '__main__':
     main(sys.argv[1:])
-
-

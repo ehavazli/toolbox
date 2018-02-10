@@ -40,37 +40,15 @@ def distance(origin, destination):
 
     return d
 
-def gps2los(g_vel, look_angle):
-    L = sin(look_angle)*g_vel
-
-    return L
-
-
 transectmat = scipy.io.loadmat('transect.mat')
 transect = transectmat['dataset'][0][0][1]
 avgInSAR = nanmean(transect,axis=1)
+#avgInSAR = nanmean(transectmat['dataset'][0][0][1],axis=1)
 stdInSAR = nanstd(transect,axis=1)
+#stdInSAR = nanstd(transectmat['dataset'][0][0][1],axis=1)
+#transect = avgInSAR*1000.0
+#std_transect = stdInSAR*1000.0
 
-# ##GPS##
-# bgnt = [26.570, 40.932]
-# doku = [26.706, 40.739]
-# kvam = [26.871, 40.601]
-# kvam2 = [26.871, 40.601]
-# sev2 = [26.880, 40.396]
-# #velocities are in mm/yr##
-# bgnt_vel = 3.11
-# doku_vel = 2.89
-# kvam_vel = -9.62
-# kvam2_vel = -11.08
-# sev2_vel = -16.52
-# ##GPS vel 2 LOS
-# bgnt_los = gps2los(bgnt_vel,34.3)
-# doku_los = gps2los(doku_vel,34.3)
-# kvam_los = gps2los(kvam_vel,34.3)
-# kvam2_los = gps2los(kvam2_vel,34.3)
-# sev2_los = gps2los(sev2_vel,34.3)
-# print 'KVAM2_LOS: '+str(kvam2_los)
-##
 transect_dist = transectmat['dataset'][0][0][2]
 transect_lat_first = transectmat['dataset'][0][0][0][0][25]
 transect_lon_first = transectmat['dataset'][0][0][3][0][25]
@@ -82,12 +60,7 @@ fault_line = line([40.6033690,26.834260],[40.7506800,27.335392])
 intersect = intersection(transect_middle_line,fault_line)
 dist = distance([transect_lat_first,transect_lon_first],intersect)*1000.0
 dist2 = distance(intersect,[transect_lat_last,transect_lon_last])*1000.0
-##
-# dist_bgnt = distance(bgnt,intersect)/1000.
-# dist_doku = distance(doku,intersect)/1000.
-# dist_kvam = distance(kvam,intersect)/1000.
-# dist_kvam2 = distance(kvam2,intersect)/1000.
-# dist_sev2 = distance(sev2,intersect)/1000.
+
 
 ##1-D space##
 x = linspace(-dist,dist2,num=len(transect),endpoint=True)
@@ -113,30 +86,36 @@ for d in D:
         rmse.append([d, s, rms])
 #        print 'RMSE of '+ str(d)+' meters ' + str(s)+' m/yr: '+str(rms)
 
-
-##PLOT##
-        # fig = plt.figure()
-        # fig.set_size_inches(10,4)
-        # ax = plt.Axes(fig, [0., 0., 1., 1.], )
-        # ax=fig.add_subplot(111)
-        # ax.plot(xp,transect*1000.0,'o',ms=1,mfc='Black', linewidth='0')
-        # for i in arange(0.0,1.01,0.01):
-        #    ax.plot(xp, (avgInSAR-i*stdInSAR)*1000, '-',color='#DCDCDC',alpha=0.5)#,color='#DCDCDC')#'LightGrey')
-        # for i in arange(0.0,1.01,0.01):
-        #    ax.plot(xp, (avgInSAR+i*stdInSAR)*1000, '-',color='#DCDCDC',alpha=0.5)#'LightGrey')
-        # ax.plot(xp,avgInSAR*1000.0,'r-')
-        # # ax.plot(xp,k*1000.,'k-')
-        # ax.plot(xp,v2*1000.,'b--')
-        # plt.ylabel('Velocity (mm/yr)')
-        # plt.xlabel('Distance (km)')
-        # fig.savefig('atan_best_'+str(d)+'_'+str(s)+'.png')
-        # plt.close()
-
 rmse = array(rmse,float32)
 idx = argmin(rmse[:,2])
 rmse_min = rmse[idx]
 print rmse_min
 v2_rms_min = sol[0]+((rmse_min[1]/pi)*arctan(x/rmse_min[0]))+sol[1]
+
+
+##Atan plus creep##
+#D = arange(100.,20000.,100.)
+#V = arange(-0.005,-0.100,-0.001)
+rmse_c=[]
+
+for d1 in D:
+    for d2 in D:
+          for s in V:
+            v1 = sol[0]+(s/pi)*(arctan(x/d1)-arctan(x/d2))+sol[1]
+#            v2 = sol[0]+((s/pi)*arctan(x/rmse_min[0]))+sol[1]
+#            m = v1+v2_rms_min
+            residual = v1 - avgInSAR
+            rms = sqrt((sum((residual)**2,0))/len(transect))
+            rmse_c.append([d1,d2, s, rms])
+#            print 'RMSE of '+ str(d)+'_'+str(d+100.)+' meters ' + str(s)+' m/yr: '+str(rms)
+
+rmse_c = array(rmse_c,float32)
+idx = argmin(rmse_c[:,3])
+rmse_c_min = rmse_c[idx]
+print rmse_c_min
+v1_rms_min = sol[0]+(rmse_c_min[2]/pi)*(arctan(x/rmse_c_min[0])-arctan(x/rmse_c_min[1]))+sol[1]
+m_c = v1_rms_min+v2_rms_min
+
 
 fig = plt.figure()
 plt.rcParams.update({'font.size': 22})
@@ -149,11 +128,14 @@ for i in arange(0.0,1.01,0.01):
 for i in arange(0.0,1.01,0.01):
    ax.plot(xp, (avgInSAR+i*stdInSAR)*1000, '-',color='#DCDCDC',alpha=0.5)#'LightGrey')
 ax.plot(xp,avgInSAR*1000.0,'r-',label = 'Average velocity')
-#ax.plot(xp,(k*1000.),'k-',label='inversion')
+
+ax.plot(xp,(v1_rms_min*1000.),'k--',label='inversion')
+
 label = 'Best Fit: '+str(int(rmse_min[0]))+' meters '+str(int(abs(round(rmse_min[1]*1000.,2))))+' mm/yr'
 ax.plot(xp,(v2_rms_min*1000.),'b--',label=label)
 
-#ax.plot(dist_kvam2,kvam2_los,'o',label='KVM2')
+label = 'Best Fit: '+str(int(rmse_c_min[0]))+' meters '+str(int(rmse_c_min[1]))+' meters '+str(rmse_c_min[2])+' mm/yr'
+ax.plot(xp,(m_c*1000.),'k-',label=label)
 
 ax.legend(loc='upper right')
 plt.ylabel('Velocity (mm/yr)')

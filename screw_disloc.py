@@ -55,7 +55,6 @@ intersect = intersection(transect_middle_line,fault_line)
 #intersect_dist = sqrt((transect_lat_last-transect_lat_first)**2+(transect_lon_last-transect_lon_first)**2)
 dist = distance([transect_lat_first,transect_lon_first],intersect)*1000.0
 dist2 = distance(intersect,[transect_lat_last,transect_lon_last])*1000.0
-
 # transect_middle_line_lat = linspace(transect_lat_first, transect_lat_last, num = len(transect_meter), endpoint = True)
 # transect_middle_line_lon = linspace(transect_lon_first, transect_lon_last, num = len(transect_meter), endpoint = True)
 # transect_middle_line = column_stack((transect_middle_line_lat,transect_middle_line_lon))
@@ -70,6 +69,8 @@ dist2 = distance(intersect,[transect_lat_last,transect_lon_last])*1000.0
 # print dist+dist2
 # sys.exit()
 
+
+
 V = -0.015 #Constant velocity
 D = 12000.
 d = 800.
@@ -79,13 +80,23 @@ x = linspace(-dist,dist2,num=len(transect),endpoint=True)
 xp = x/1000.
 # y = arange(-377.5,377.5,1)
 # yp = y/1000.
+
+##Linear Component##
+G = ones([len(transect),2])
+G[:,0] = xp
+G_inv = dot(linalg.inv(dot(G.T,G)), G.T)
+G_inv = array(G_inv, float32)
+sol = dot(G_inv,transect_meter)
+k = dot(G,sol)
+
+
 ##Shallow creep between depths of d0 and d
 v1 = (V/pi)*(arctan(x/d0)-arctan(x/d))
 dv1 = (V/(pi*d0))*1./(1.+(x/d0)**2) - (V/(pi*d))*1./(1.+(x/d)**2)
-v1 = v1-0.004
+
 
 ##Free slip for depths greater than D
-v2 = (V/pi)*arctan(x/D)
+v2 = sol[0]+(V/pi)*arctan(x/D)+sol[1]
 dv2 = (V/(pi*D))*1./(1.+(x/D)**2)
 ##PLOT
 fig = plt.figure(1)
