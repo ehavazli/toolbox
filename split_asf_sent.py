@@ -6,7 +6,10 @@ import sys
 import numpy as np
 
 def asf_vertex(fileName):
-    x = ('''import sys, csv
+    x = ('''
+    #! /usr/bin/env python3
+
+    import sys, csv
     import os, os.path
     import tempfile, shutil
     import re
