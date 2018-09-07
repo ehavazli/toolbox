@@ -50,13 +50,10 @@ def main(argv):
     except:
         print '''
     *******************************************
-
        Usage: atan_bestfit_creep.py directory model offset
-
             directory: directory to transect.mat file
             model: 'interseismic' or 'creep' or 'both'
             offset: if there is an offset of creep from the fault (in meters)
-
     *******************************************
     '''
         sys.exit(1)
@@ -385,81 +382,80 @@ def main(argv):
 ################################################################################
 
     elif model == 'both':
-                    for d in D:
-                        for s in V:
-                            v2 = sol[0]+((s/pi)*arctan(x/d))+sol[1]
-                            residual = v2 - avgInSAR
-                            rms = sqrt((sum((residual)**2,0))/len(transect))
-                            rmse.append([d, s, rms])
+        rmse = []
+        for d in D:
+            for s in V:
+                v2 = sol[0]+((s/np.pi)*np.arctan(x/d))+sol[1]
+                residual = v2 - avgInSAR
+                rms = np.sqrt((sum((residual)**2,0))/len(transect))
+                rmse.append([d, s, rms])
                 #        print 'RMSE of '+ str(d)+' meters ' + str(s)+' m/yr: '+str(rms)
 
 
 
-                    rmse = array(rmse,float32)
-                    idx = argmin(rmse[:,2])
-                    rmse_min = rmse[idx]
-                    print rmse_min
-                    v2_rms_min = ((rmse_min[1]/pi)*arctan(x/rmse_min[0]))
+        rmse = np.array(rmse,np.float32)
+        idx = np.argmin(rmse[:,2])
+        rmse_min = rmse[idx]
+        print rmse_min
+        v2_rms_min = ((rmse_min[1]/np.pi)*np.arctan(x/rmse_min[0]))
         ##Atan plus creep##
-                    x = x+offset
-                    rmse_c=[]
-                    Q = arange(0.00001,rmse_min[0],100)
+        x = x+offset
+        rmse_c=[]
+#        Q = arange(0.00001,rmse_min[0],100)
 
-                    d1=0.01
+        d1=0.01
 
-                    for d2 in D:
-                        for s in V:
-                            v1 = sol[0]+sol[1]+v2_rms_min+((s/pi)*(arctan(x/d1)-arctan(x/d2)))
-                            residual = v1 - avgInSAR
-                            rms = sqrt((sum((residual)**2,0))/len(transect))
-                            rmse_c.append([d1,d2, s, rms])
+        rmse_c = []
+        for d2 in D:
+            for s in V:
+                v1 = sol[0]+sol[1]+v2_rms_min+((s/np.pi)*(np.arctan(x/d1)-np.arctan(x/d2)))
+                residual = v1 - avgInSAR
+                rms = np.sqrt((sum((residual)**2,0))/len(transect))
+                rmse_c.append([d1,d2, s, rms])
 
-                    rmse_c = array(rmse_c,float32)
-                    idx = argmin(rmse_c[:,3])
-                    rmse_c_min = rmse_c[idx]
-                    print rmse_c_min
-                    v1_rms_min = (rmse_c_min[2]/pi)*(arctan(x/rmse_c_min[0])-arctan(x/rmse_c_min[1]))
+        rmse_c = np.array(rmse_c,np.float32)
+        idx = np.argmin(rmse_c[:,3])
+        rmse_c_min = rmse_c[idx]
+        print rmse_c_min
+        v1_rms_min = (rmse_c_min[2]/np.pi)*(np.arctan(x/rmse_c_min[0])-np.arctan(x/rmse_c_min[1]))
 
-                    m_c =v1_rms_min+v2_rms_min+sol[0]+sol[1]
+        m_c =v1_rms_min+v2_rms_min+sol[0]+sol[1]
 
         ####################
-                    fig = plt.figure()
-                    plt.rcParams.update({'font.size': 22})
-                    fig.set_size_inches(20,8)
-                    ax = plt.Axes(fig, [0., 0., 1., 1.], )
-                    ax=fig.add_subplot(111)
+        fig = plt.figure()
+        plt.rcParams.update({'font.size': 22})
+        fig.set_size_inches(20,8)
+        ax = plt.Axes(fig, [0., 0., 1., 1.], )
+        ax=fig.add_subplot(111)
 
         ##PLOT average and standard deviation##
-                    ax.plot(xp,transect*1000.0,'o',ms=1,mfc='Black', linewidth='0')
-                    for i in arange(0.0,1.01,0.01):
-                        ax.plot(xp, (avgInSAR-i*stdInSAR)*1000, '-',color='#DCDCDC',alpha=0.5)#,color='#DCDCDC')#'LightGrey')
-                    for i in arange(0.0,1.01,0.01):
-                        ax.plot(xp, (avgInSAR+i*stdInSAR)*1000, '-',color='#DCDCDC',alpha=0.5)#'LightGrey')
-                    ax.plot(xp,avgInSAR*1000.0,'r-',label = 'Average velocity')
-                    label1 = 'Interseismic only: Locking depth: '+str(int(rmse_min[0]))+' meters - Slip rate: '+str(int(abs(round(rmse_min[1]*1000.,2))))+' mm/yr'
+        ax.plot(xp,transect*1000.0,'o',ms=1,mfc='Black', linewidth='0')
+        for i in np.arange(0.0,1.01,0.01):
+            ax.plot(xp, (avgInSAR-i*stdInSAR)*1000, '-',color='#DCDCDC',alpha=0.5)#,color='#DCDCDC')#'LightGrey')
+        for i in np.arange(0.0,1.01,0.01):
+            ax.plot(xp, (avgInSAR+i*stdInSAR)*1000, '-',color='#DCDCDC',alpha=0.5)#'LightGrey')
+        ax.plot(xp,avgInSAR*1000.0,'r-',label = 'Average velocity')
+        label1 = 'Interseismic only: Locking depth: '+str(int(rmse_min[0]))+' meters - Slip rate: '+str(int(abs(round(rmse_min[1]*1000.,2))))+' mm/yr'
 
-                    ax.plot(xp,((sol[0]+v2_rms_min+sol[1])*1000.),'b--',label=label1)
+        ax.plot(xp,((sol[0]+v2_rms_min+sol[1])*1000.),'b--',label=label1)
 
-                    label2 = 'Interseismic with creep: Creep depth: 0 - '+str(int(rmse_c_min[1]))+' meters - Creep rate: '+str(int(abs(round(rmse_c_min[2]*1000.,2))))+' mm/yr'
+        label2 = 'Interseismic with creep: Creep depth: 0 - '+str(int(rmse_c_min[1]))+' meters - Creep rate: '+str(int(abs(round(rmse_c_min[2]*1000.,2))))+' mm/yr'
 
-                    ax.plot(xp,(m_c*1000.),'k-',label=label2)
+        ax.plot(xp,(m_c*1000.),'k-',label=label2)
 
-                    ax.legend(loc='lower left')
-                    plt.ylabel('Velocity (mm/yr)')
-                    plt.xlabel('Distance (km)')
-                    fig.savefig(directory+'atan_best_'+str(rmse_c_min[0])+'_'+str(rmse_c_min[1])+'.png')
-                    plt.close()
+        ax.legend(loc='lower left')
+        plt.ylabel('Velocity (mm/yr)')
+        plt.xlabel('Distance (km)')
+        fig.savefig(directory+'atan_best_'+str(rmse_c_min[0])+'_'+str(rmse_c_min[1])+'.png')
+        plt.close()
 
     else:
                 print '''
             *******************************************
-
                Usage: atan_bestfit_creep.py directory model offset
-
                     directory: directory to transect.mat file
                     model: 'interseismic' or 'creep'
                     offset: if there is an offset of creep from the fault
-
             *******************************************
             '''
                 sys.exit(1)
