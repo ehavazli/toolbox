@@ -6,6 +6,7 @@ import sys
 import numpy as np
 import glob
 import matplotlib.pyplot as plt
+import matplotlib.tri as tri
 import scipy.io
 import math
 from shapely.geometry import MultiLineString, Point,LineString
@@ -50,7 +51,7 @@ def main(argv):
     except:
         print '''
     *******************************************
-       Usage: atan_bestfit_creep.py directory model offset
+       Usage: atan_bestfit_creep.py [directory] [model] [offset] [number of MC iterations]
             directory: directory to transect.mat file
             model: 'interseismic' or 'creep' or 'both'
             offset: if there is an offset of creep from the fault (in meters)
@@ -58,7 +59,6 @@ def main(argv):
     '''
         sys.exit(1)
     fileList = glob.glob(directory+'/*.mat')
-    print(fileList[0])
     transectmat = scipy.io.loadmat(str(fileList[0]))
     # transect = transectmat['dataset'][0][0][1]
     transect = transectmat['dataset'][0][0][1]
@@ -139,11 +139,16 @@ def main(argv):
 ################################################################################
     depth = []
     slip = []
+    McMinRms = []
     varModel = []
 ##1-D space##
     x = np.linspace(-dist,dist2,num=len(avgInSAR),endpoint=True)
+
     xp = (x/1000.)
 ################################################################################
+    avgInSAR = avgInSAR-avgInSAR[0]
+    transect = transect-transect[0]
+
     G = np.ones([len(transect),2])
     G[:,0] = xp
     G_inv = np.dot(np.linalg.inv(np.dot(G.T,G)), G.T)
@@ -151,8 +156,9 @@ def main(argv):
     sol = np.dot(G_inv,avgInSAR)
     k = np.dot(G,sol)
 
-    D = np.arange(100.,20000.,100.)
-    V = np.arange(-0.001,-0.10,-0.001)
+    V = np.arange(-0.000,-0.03,-0.0005)
+    D = np.arange(0.0001,6000.,100.)
+
     rmse_inv=[]
     for d in D:
         for s in V:
@@ -161,14 +167,16 @@ def main(argv):
             rms = np.sqrt((sum((residual)**2,0))/len(transect))
             rmse_inv.append([d, s, rms])
 
-
+    rmse_inv=[[9000, -0.020, 0]]
     rmse_inv = np.array(rmse_inv,np.float32)
     idx = np.argmin(rmse_inv[:,2])
     rmse_inv_min = rmse_inv[idx]
     print 'Inversion: ' +str(rmse_inv_min)
-    v2_rms_min_inv = ((rmse_inv_min[1]/np.pi)*np.arctan(x/rmse_inv_min[0]))
+    v2_rms_min_inv =sol[0]+sol[1]+((rmse_inv_min[1]/np.pi)*np.arctan(x/rmse_inv_min[0]))
 ################################################################################
     if model == 'interseismic':
+
+#######Monte-Carlo Error Bounds#################################################
             for q in xrange(noit):
                 avgVel = []
                 for i in xrange(len(avgInSAR)):
@@ -182,77 +190,86 @@ def main(argv):
                 sol = np.dot(G_inv,avgVel)
                 k = np.dot(G,sol)
 
-                D = np.arange(1000.,10000.,100.)
-                V = np.arange(-0.001,-0.030,-0.0005)
-                rmse=[]
+                # D = np.arange(1000.,10000.,100.)
+                # V = np.arange(-0.001,-0.030,-0.0005)
+                rmse_Mc=[]
                 for d in D:
                     for s in V:
                         v2 = sol[0]+((s/np.pi)*np.arctan(x/d))+sol[1]
                         residual = v2 - avgVel
                         rms = np.sqrt((sum((residual)**2,0))/len(transect))
-                        rmse.append([d, s, rms])
+                        rmse_Mc.append([d, s, rms])
 
-
-                rmse = np.array(rmse,np.float32)
-                idx = np.argmin(rmse[:,2])
-                rmse_min = rmse[idx]
-                print str(q)+' '+ str(rmse_min)
-                depth.append(rmse_min[0])
-                slip.append(rmse_min[1])
+#######Monte-Carlo Error Bounds#################################################
+                rmse_Mc_inv = np.array(rmse_Mc,np.float32)
+                idx = np.argmin(rmse_Mc_inv[:,2])
+                rmse_Mc_inv_min = rmse_Mc_inv[idx]
+                print str(q)+' '+ str(rmse_Mc_inv_min)
+                depth.append(rmse_Mc_inv_min[0])
+                slip.append(rmse_Mc_inv_min[1])
                 # r.append(rmse_min[2])
-                varModel.append(rmse_min[2]**2)
+                varModel.append(rmse_Mc_inv_min[2]**2)
+                McMinRms.append(rmse_Mc_inv_min[2])
 
             stdModel = np.sqrt(sum(varModel))
-            slip[:] = [x * 1000.0 for x in slip]
+            slip[:] = [x * -1000.0 for x in slip]
+
+            stdDepth = roundup(np.std(depth))
+            stdSlip = math.ceil(np.std(slip))
 
 ################################################################################
 ##PLOT average and standard deviation##
             fig = plt.figure()
-            plt.rcParams.update({'font.size': 22})
-            fig.set_size_inches(10,10)
+            plt.rcParams.update({'font.size': 24})
+            fig.set_size_inches(12,12)
             ax = plt.Axes(fig, [0., 0., 1., 1.], )
             ax=fig.add_subplot(111)
+
+            plt.scatter(slip,depth,c='blue',marker='.')
+            plt.scatter(rmse_inv_min[1]*-1000.,rmse_inv_min[0], s=200, c='red', marker='*')
+
+            depth.append(rmse_inv_min[0])
+            slip.append(rmse_inv_min[1])
+            McMinRms.append(rmse_inv_min[2]*1000.)
+
+            Xi, Yi = np.meshgrid(-V*1000.,D)
+            z = np.array(np.reshape(rmse_Mc_inv[:,2],(len(V),len(D)))*1000.)
+            # z = np.array(McMinRms)*1000
+            # contours = plt.contour(Xi, Yi, z*1000.,int(np.amax(z*1000.)-np.amin(z*1000.)))
+            # contours = plt.contour(Xi, Yi, z,500,colors='black')
+            # contours = plt.contour(Xi, Yi, z,levels=(2.50,2.75,3,3.25,3.50,3.75,4,4.25,4.50,4.75,5),colors='black',linewidths=0.5)
+            contours = plt.contour(Xi, Yi, z,20,colors='black',linewidths=0.5)
+
+            plt.clabel(contours, inline=True, fontsize=18,fmt='%.2f')
 
             cov = np.cov(slip, depth)
             vals, vecs = eigsorted(cov)
             theta = np.degrees(np.arctan2(*vecs[:,0][::-1]))
-            for nstd in xrange(1,4):        ####nstd is 1sigma, 2sigma, 3sigma
+            for nstd in xrange(1,2):        ####nstd is 1sigma, 2sigma, 3sigma
                 w, h = 2 * nstd * np.sqrt(vals)
                 ell = Ellipse(xy=(np.mean(slip), np.mean(depth)),
                             width=w, height=h,
                             angle=theta, color='black')
                 ell.set_facecolor('none')
+                ell.set_linestyle('--')
+                ell.set_linewidth('2')
                 ax.add_artist(ell)
+                ax.annotate('68%',xy=((np.mean(slip)),(np.mean(depth)-(w/2))),xycoords='data')
 
-            plt.scatter(slip,depth)
-            plt.scatter(rmse_inv_min[1]*1000.,rmse_inv_min[0], s=60, c='red', marker='*')
-            plt.ylabel('Depth (m)')
+            print 'Mean Slip '+ str(np.mean(slip))
+            print 'Mean Depth '+ str(np.mean(depth))
+            print 'W: '+ str(w)
+            print 'H: '+ str(h)
+
+            plt.ylabel('Locking Depth (m)')
             plt.xlabel('Slip (mm/yr)')
-            # plt.xlim(1,30)
-            # plt.ylim(1000,10000)
+            # plt.xlim(0,20)
+            # plt.ylim(1000,6000)
             fig.savefig('depth_vs_slip.png')
             plt.close()
-
-            depth.append(rmse_inv_min[0])
-            slip.append(rmse_inv_min[1])
-            stdDepth = roundup(np.std(depth))
-            stdSlip = math.ceil(np.std(slip))
-
-            # fig = plt.figure()
-            # plt.rcParams.update({'font.size': 22})
-            # fig.set_size_inches(20,8)
-            # ax = plt.Axes(fig, [0., 0., 1., 1.], )
-            # ax=fig.add_subplot(111)
-            # ax.plot(xp,transect*1000.0,'o',ms=1,mfc='Black', linewidth='0')
-            # label = 'Best Fit: '+str(int(rmse_inv_min[0]))+'$\pm$'+str(int(stdDepth))+'m; '+str(int(abs(round(rmse_inv_min[1]*1000.,2))))+'$\pm$'+str(int(stdSlip))+'mm/yr'
-            # ax.plot(xp,(v2_rms_min_inv*1000.),'b--',label=label)
-            # ax.legend(loc='upper right')
-            # plt.ylabel('Velocity (mm/yr)')
-            # plt.xlabel('Distance (km)')
-            # fig.savefig('atan_best_'+str(rmse_inv_min[0])+'_'+str(rmse_inv_min[1])+'.png')
-            # plt.close()
+################################################################################
             fig = plt.figure()
-            plt.rcParams.update({'font.size': 22})
+            plt.rcParams.update({'font.size': 20})
             fig.set_size_inches(20,8)
             ax = plt.Axes(fig, [0., 0., 1., 1.], )
             ax=fig.add_subplot(111)
@@ -264,9 +281,9 @@ def main(argv):
                 ax.plot(xp, (avgInSAR+i*stdInSAR)*1000, '-',color='#DCDCDC',alpha=0.5)#'LightGrey')
             ax.plot(xp,avgInSAR*1000.0,'r-',label = 'Average velocity')
 
-            # label1 = 'Interseismic only: Locking depth: '+str(int(rmse_min[0]))+' meters - Slip rate: '+str(int(abs(round(rmse_min[1]*1000.,2))))+' mm/yr'
-            label1 = 'Best Fit: '+str(int(rmse_inv_min[0]))+'$\pm$'+str(int(stdDepth))+'m; '+str(int(abs(round(rmse_inv_min[1]*1000.,2))))+'$\pm$'+str(int(stdSlip))+'mm/yr'
-            ax.plot(xp,((sol[0]+v2_rms_min_inv+sol[1])*1000.),'b--',label=label1)
+            label1 = 'Interseismic only: Locking depth: '+str(int(rmse_inv_min[0]))+'$\pm$'+str(int(stdDepth))+'m - Slip rate: '+str(int(abs(round(rmse_inv_min[1]*1000.,2))))+'$\pm$'+str(int(stdSlip))+' mm/yr'
+            # label1 = 'D: '+str(int(rmse_inv_min[0]))+'$\pm$'+str(int(stdDepth))+'m - V: '+str(int(abs(round(rmse_inv_min[1]*1000.,2))))+'$\pm$'+str(int(stdSlip))+'mm/yr'
+            ax.plot(xp,((v2_rms_min_inv)*1000.),'b--',label=label1)
             ax.legend(loc='lower left')
             plt.ylabel('Velocity (mm/yr)')
             plt.xlabel('Distance (km)')
@@ -274,7 +291,6 @@ def main(argv):
             plt.close()
 ################################################################################
     elif model == 'creep':
-##Atan plus creep##
             x = x+offset
             rmse_c_inv=[]
             # Q = np.arange(0.00001,rmse_inv[0],100)
@@ -283,7 +299,7 @@ def main(argv):
 
             for d2 in D:
                 for s in V:
-                    v1 = sol[0]+sol[1]+v2_rms_min_inv+((s/np.pi)*(np.arctan(x/d1)-np.arctan(x/d2)))
+                    v1 = v2_rms_min_inv+((s/np.pi)*(np.arctan(x/d1)-np.arctan(x/d2)))
                     residual = v1 - avgInSAR
                     rms = np.sqrt((sum((residual)**2,0))/len(transect))
                     rmse_c_inv.append([d1,d2, s, rms])
@@ -292,9 +308,9 @@ def main(argv):
             idx = np.argmin(rmse_c_inv[:,3])
             rmse_c_inv_min = rmse_c_inv[idx]
             print 'Creep Inversion: '+str(rmse_c_inv_min)
-            v1_rms_min = (rmse_c_inv_min[2]/np.pi)*(np.arctan(x/rmse_c_inv_min[0])-np.arctan(x/rmse_c_inv_min[1]))
-            m_c_inv =v1_rms_min+v2_rms_min_inv+sol[0]+sol[1]
-
+            v1_rms_min =(rmse_c_inv_min[2]/np.pi)*(np.arctan(x/rmse_c_inv_min[0])-np.arctan(x/rmse_c_inv_min[1]))
+            m_c_inv =v1_rms_min+v2_rms_min_inv
+#######Monte-Carlo Error Bounds#################################################
             for q in xrange(noit):
                 avgVel = []
                 rmse_c=[]
@@ -304,7 +320,7 @@ def main(argv):
 
                 for d2 in D:
                     for s in V:
-                        v1 = sol[0]+sol[1]+v2_rms_min_inv+((s/np.pi)*(np.arctan(x/d1)-np.arctan(x/d2)))
+                        v1 = v2_rms_min_inv+((s/np.pi)*(np.arctan(x/d1)-np.arctan(x/d2)))
                         residual = v1 - avgVel
                         rms = np.sqrt((sum((residual)**2,0))/len(transect))
                         rmse_c.append([d1,d2, s, rms])
@@ -319,38 +335,133 @@ def main(argv):
                 depth.append(rmse_c_min[1])
                 slip.append(rmse_c_min[2])
                 varModel.append(rmse_c_min[3]**2)
+                McMinRms.append(rmse_c_min[3])
+
 
             stdModel = np.sqrt(sum(varModel))
-            slip[:] = [x * 1000.0 for x in slip]
-
+            slip[:] = [x * -1000.0 for x in slip]
+#######Monte-Carlo Error Bounds Plot STD Ellipses###############################
             fig = plt.figure()
-            plt.rcParams.update({'font.size': 22})
-            fig.set_size_inches(10,10)
+            plt.rcParams.update({'font.size': 24})
+            fig.set_size_inches(12,12)
             ax = plt.Axes(fig, [0., 0., 1., 1.], )
             ax=fig.add_subplot(111)
+
+            plt.scatter(slip,depth,c='blue',marker='.')
+            plt.scatter(rmse_c_inv_min[2]*-1000.,rmse_c_inv_min[1], s=200, c='red', marker='*')
+
+            depth.append(rmse_c_inv_min[1])
+            slip.append(rmse_c_inv_min[2]*-1000.)
+            McMinRms.append(rmse_c_inv_min[3]*1000.)
+
+            Xi, Yi = np.meshgrid(-V*1000.,D)
+            z = np.array(np.reshape(rmse_c[:,3],(len(V),len(D)))*1000.)
+            # z = np.array(McMinRms)*1000
+            # contours = plt.contour(Xi, Yi, z*1000.,int(np.amax(z*1000.)-np.amin(z*1000.)))
+            # contours = plt.contour(Xi, Yi, z,500,colors='black')
+            # contours = plt.contour(Xi, Yi, z,levels=(2.50,2.75,3,3.25,3.50,3.75,4,4.25,4.50,4.75,5),colors='black',linewidths=0.5)
+            # contours = plt.contour(Xi, Yi, z,700,colors='black',linewidths=0.5)
+            #
+            # plt.clabel(contours, inline=True, fontsize=18,fmt='%.2f')
 
             cov = np.cov(slip, depth)
             vals, vecs = eigsorted(cov)
             theta = np.degrees(np.arctan2(*vecs[:,0][::-1]))
-            for nstd in xrange(1,4):        ####nstd is 1sigma, 2sigma, 3sigma
+            for nstd in xrange(1,2):        ####nstd is 1sigma, 2sigma, 3sigma
                 w, h = 2 * nstd * np.sqrt(vals)
                 ell = Ellipse(xy=(np.mean(slip), np.mean(depth)),
                             width=w, height=h,
                             angle=theta, color='black')
                 ell.set_facecolor('none')
+                ell.set_linestyle('--')
+                ell.set_linewidth('2')
                 ax.add_artist(ell)
+                ax.annotate('68%',xy=((np.mean(slip)),(np.mean(depth)+(w/2))),xycoords='data')
 
-            plt.scatter(slip,depth)
-            plt.scatter(rmse_c_min[2]*1000.,rmse_c_min[1], s=60, c='red', marker='*')
+            print 'Mean Slip '+ str(np.mean(slip))
+            print 'Mean Depth '+ str(np.mean(depth))
+            print 'W: '+ str(w)
+            print 'H: '+ str(h)
+
             plt.ylabel('Depth (m)')
             plt.xlabel('Slip (mm/yr)')
-            # plt.xlim(1,30)
-            # plt.ylim(1000,10000)
+            # plt.xlim(0,10)
+            # plt.ylim(200,1200)
             fig.savefig('depth_vs_slip.png')
             plt.close()
+            # fig = plt.figure()
+            # plt.rcParams.update({'font.size': 22})
+            # fig.set_size_inches(10,10)
+            # ax = plt.Axes(fig, [0., 0., 1., 1.], )
+            # ax=fig.add_subplot(111)
+            #
+            # plt.scatter(slip,depth)
+            # plt.scatter(rmse_c_min[2]*1000.,rmse_c_min[1], s=200, c='red', marker='*')
+            # plt.ylabel('Depth (m)')
+            # plt.xlabel('Slip (mm/yr)')
+            # # plt.xlim(1,30)
+            # # plt.ylim(1000,10000)
+            # fig.savefig('depth_vs_slip.png')
+            # plt.close()
+            #
+            # depth.append(rmse_inv_min[0])
+            # slip.append(rmse_inv_min[1])
+            # stdDepth = roundup(np.std(depth))
+            # stdSlip = math.ceil(np.std(slip))
+            #
+            # fig = plt.figure()
+            # plt.rcParams.update({'font.size': 22})
+            # fig.set_size_inches(15,15)
+            # ax = plt.Axes(fig, [0., 0., 1., 1.], )
+            # ax=fig.add_subplot(111)
+            # InvRms = rmse_c[:,3]
+            # z = np.array(np.reshape(InvRms,(len(V),len(D))))
+            # Xi, Yi = np.meshgrid(-V*1000.,D)
+            # # plt.scatter(-rmse_inv[:,1]*1000.,rmse_inv[:,0],c='blue')
+            # plt.scatter(rmse_c_min[2]*1000.,rmse_c_min[1], s=500, c='red', marker='*')
+            # contours = plt.contour(Xi, Yi, z*1000,int(np.amax(z*1000.)-np.amin(z*1000.)), colors='black')
+            # # contours = plt.contour(Xi, Yi, z*1000.,int(np.amax(z*1000.)-np.amin(z*1000.)), cmap='RdGy')
+            # plt.clabel(contours, inline=True, fontsize=10)
+            # # CS = plt.contourf(Xi, Yi, z*1000.,50, cmap='RdGy')
+            # # plt.colorbar();
+            # plt.ylabel('Depth (m)')
+            # plt.xlabel('Slip (mm/yr)')
+            # # plt.xlim(-1,20)
+            # # plt.ylim(-100,20000)
+            # fig.savefig('Contour_depth_vs_slip.png')
+            # plt.close()
 
-            depth.append(rmse_inv_min[0])
-            slip.append(rmse_inv_min[1])
+####################################Error Ellipses##############################
+            # fig = plt.figure()
+            # plt.rcParams.update({'font.size': 22})
+            # fig.set_size_inches(10,10)
+            # ax = plt.Axes(fig, [0., 0., 1., 1.], )
+            # ax=fig.add_subplot(111)
+            #
+            # cov = np.cov(slip, depth)
+            # vals, vecs = eigsorted(cov)
+            # theta = np.degrees(np.arctan2(*vecs[:,0][::-1]))
+            # for nstd in xrange(1,4):        ####nstd is 1sigma, 2sigma, 3sigma
+            #     w, h = 2 * nstd * np.sqrt(vals)
+            #     ell = Ellipse(xy=(np.mean(slip), np.mean(depth)),
+            #                 width=w, height=h,
+            #                 angle=theta, color='black')
+            #     ell.set_facecolor('none')
+            #     ax.add_artist(ell)
+
+            # plt.scatter(slip,depth)
+            # plt.scatter(rmse_c_min[2]*1000.,rmse_c_min[1], s=60, c='red', marker='*')
+            # plt.ylabel('Depth (m)')
+            # plt.xlabel('Slip (mm/yr)')
+            # # plt.xlim(1,30)
+            # # plt.ylim(1000,10000)
+            # fig.savefig('depth_vs_slip.png')
+            # plt.close()
+####################################Error Ellipses##############################
+##Monte-Carlo Error Bounds Plot STD Ellipses####################################
+
+            # depth.append(rmse_c_inv_min[0])
+            # slip.append(rmse_c_inv_min[1])
             stdDepth = roundup(np.std(depth))
             stdSlip = math.ceil(np.std(slip))
 
@@ -361,27 +472,27 @@ def main(argv):
             ax = plt.Axes(fig, [0., 0., 1., 1.], )
             ax=fig.add_subplot(111)
 
-##PLOT average and standard deviation##
             ax.plot(xp,transect*1000.0,'o',ms=1,mfc='Black', linewidth='0')
             for i in np.arange(0.0,1.01,0.01):
                 ax.plot(xp, (avgInSAR-i*stdInSAR)*1000, '-',color='#DCDCDC',alpha=0.5)#,color='#DCDCDC')#'LightGrey')
             for i in np.arange(0.0,1.01,0.01):
                 ax.plot(xp, (avgInSAR+i*stdInSAR)*1000, '-',color='#DCDCDC',alpha=0.5)#'LightGrey')
             ax.plot(xp,avgInSAR*1000.0,'r-',label = 'Average velocity')
-##PLOT average and standard deviation##
 
-            label2 = 'Creep depth: 0 - '+str(int(rmse_c_inv_min[1]))+' $\pm$'+str(stdDepth)+' m - Creep rate: '+str(int(abs(round(rmse_c_inv_min[2]*1000.,2))))+' $\pm$'+str(int(stdSlip))+' mm/yr'
+            label2 = 'Creep depth: 0 - '+str(int(rmse_c_inv_min[1]))+'$\pm$'+str(stdDepth)+' m - Creep rate: '+str(int(abs(round(rmse_c_inv_min[2]*1000.,2))))+'$\pm$'+str(int(stdSlip))+' mm/yr'
 
             ax.plot(xp,(m_c_inv*1000.),'k-',label=label2)
 
             ax.legend(loc='lower left')
             plt.ylabel('Velocity (mm/yr)')
             plt.xlabel('Distance (km)')
-            fig.savefig(directory+'atan_best_'+str(rmse_c_min[0])+'_'+str(rmse_c_min[1])+'.png')
+            fig.savefig(directory+'atan_best_'+str(rmse_c_inv_min[0])+'_'+str(rmse_c_inv_min[1])+'.png')
             plt.close()
 ################################################################################
 
     elif model == 'both':
+        transect = transect-transect[0]
+        avgInSAR = avgInSAR-avgInSAR[0]
         rmse = []
         for d in D:
             for s in V:
