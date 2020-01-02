@@ -10,7 +10,6 @@
 import os
 import numpy as np
 from sklearn.utils import resample
-from mintpy.objects import timeseries
 from mintpy.utils import readfile, writefile
 
 
@@ -45,12 +44,11 @@ def main(iargs=None):
     dateList = tsData.get_date_list()
 
     vel = np.zeros((inps.bootCount,length,width))
-    vel_std = []
 
     for i in range(inps.bootCount):
         # print('Running boot number: ',i+1)
         bootSamples = list(np.sort(resample(dateList, replace=True, n_samples=inps.sampleNo)))
-        dropList = [x for x in dateList if x not in bootSamples]
+        # dropList = [x for x in dateList if x not in bootSamples]
 
         # from ARIAtools import progBar
         # prog_bar = progBar.progressBar(maxValue=inps.bootCount,prefix='Running boot number: '+i)
