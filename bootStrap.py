@@ -59,10 +59,10 @@ def bootstrap(timeseriesFile,sampleNo,bootCount):
         vel[i] = np.array(X[0, :], dtype='float32')
 
     prog_bar.close()
-    print('Finished calculating resampling and velocity calculation')
+    print('Finished resampling and velocity calculation')
     velMean = vel.mean(axis=0).reshape(length,width)
     velStd = vel.std(axis=0).reshape(length,width)
-    print('Calculated mean velocity and standard deviation')
+    print('Calculated mean and standard deviation of bootstrap estimations')
 
     atr['FILE_TYPE'] = 'velocity'
     atr['UNIT'] = 'm/year'
