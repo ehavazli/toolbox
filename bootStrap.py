@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#
-# Author: Emre Havazli
-# Copyright 2019, by the California Institute of Technology. ALL RIGHTS
-# RESERVED. United States Government Sponsorship acknowledged.
-#
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+############################################################
+# Program is part of MintPy                                #
+# Copyright (c) 2013, Zhang Yunjun, Heresh Fattahi         #
+# Author: Emre Havazli, Jan 2020                           #
+############################################################
 
 import os
 import numpy as np
