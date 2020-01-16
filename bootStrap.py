@@ -9,7 +9,7 @@ import os
 import numpy as np
 from sklearn.utils import resample
 from mintpy.utils import readfile, writefile
-
+from ARIAtools import progBar
 
 def createParser():
     '''
@@ -20,7 +20,7 @@ def createParser():
     parser = argparse.ArgumentParser(description='Bootstrap method for velocity and uncertainty estimation')
     parser.add_argument('-f', '--file', dest='timeseriesFile', type=str, required=True, help='Timeseries File')
     parser.add_argument('-w', '--workdir', dest='workdir', type=str, default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-ns', '--nsamples', dest='sampleNo',type=int, default=10, help='Number of samples in the subset (default: 10)')
+    # parser.add_argument('-ns', '--nsamples', dest='sampleNo',type=int, default=10, help='Number of samples in the subset (default: 10)')
     parser.add_argument('-nb', '--nboot', dest='bootCount', type=int, default=400, help='Number of bootstrap runs (default: 400)')
     parser.add_argument('-o', '--output', dest='outfile', type=str, default='bootVel.h5', help='Name of output file (default: bootVel.h5)')
 
@@ -30,7 +30,7 @@ def cmdLineParse(iargs = None):
     parser = createParser()
     return parser.parse_args(args=iargs)
 
-def bootstrap(timeseriesFile,sampleNo,bootCount):
+def bootstrap(timeseriesFile,bootCount):
     ts_data, atr = readfile.read(timeseriesFile)
     tsData = readfile.timeseries(timeseriesFile)
     if atr['UNIT'] == 'mm':
@@ -38,16 +38,14 @@ def bootstrap(timeseriesFile,sampleNo,bootCount):
 
     length, width = int(atr['LENGTH']), int(atr['WIDTH'])
     dateList = tsData.get_date_list()
+    sampleNo = len(dateList)
     vel = np.zeros((bootCount,(length*width)))
-
+    prog_bar = progBar.progressBar(maxValue=bootCount,prefix='Calculating ')
     for i in range(bootCount):
         bootSamples = list(np.sort(resample(dateList, replace=True, n_samples=sampleNo)))
         # dropList = [x for x in dateList if x not in bootSamples]
 
-        from ARIAtools import progBar
-        prog_bar = progBar.progressBar(maxValue=bootCount,prefix='Running boot number: '+str(i+1)+' ')
-        prog_bar.update(i+1)
-
+        prog_bar.update(i+1, suffix='Running boot number: '+str(i+1))
         bootList = []
         for k in bootSamples:
             bootList.append(dateList.index(k))
@@ -75,7 +73,7 @@ def bootstrap(timeseriesFile,sampleNo,bootCount):
 def main(iargs=None):
     inps = cmdLineParse(iargs)
 
-    velMean, velStd, atr = bootstrap(inps.timeseriesFile,inps.sampleNo,inps.bootCount)
+    velMean, velStd, atr = bootstrap(inps.timeseriesFile,inps.bootCount)
 
     # write to HDF5 file
     dsDict = dict()
