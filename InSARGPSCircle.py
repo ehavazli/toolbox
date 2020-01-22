@@ -14,6 +14,8 @@ from osgeo import ogr
 import pandas as pd
 import subprocess
 import os, sys
+import shutil
+import timeit
 import pyproj
 import glob
 
@@ -30,6 +32,7 @@ def createParser():
     # parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
     parser.add_argument('-c', '--csv', dest='csvFile', help='CSV file listing GPS stations (SiteID, Lon, Lat)')
+    parser.add_argument('-tr', '--track', dest='trackDir', help='Products folder with the relevant track number')
     # parser.add_argument('-g', '--gps', dest='gpsSite', help='GPS stations given in the order as: SiteID, Lon, Lat')
     parser.add_argument('-d', '--dist', dest='distance', type=int, help='Distance around GPS station for mask generation (in km)')
     parser.add_argument('-s', '--step', dest='step', default='all', help='Choose step to do (all steps are run from scracth if no step is given) [generateMaskdownload,tsSetup,prepAria,timeseries,skipdownload]')
@@ -114,24 +117,75 @@ def ARIAdownload(csvFile,workdir):
     print('Download ARIA products using generated mask files')
     df = pd.read_csv(csvFile)
     siteName = list(df.iloc[:,0])
+    prodDir = os.path.join(os.path.abspath(workdir),'products')
 
     for i in siteName:
         mask = os.path.abspath(os.path.join(workdir,i,i+'.geojson'))
-        print('Running: ','ariaDownload.py', '-b', mask)
-        subprocess.run(['ariaDownload.py', '-b', mask])
+        print('Running: ','ariaDownload.py', '-b', mask,'-w',prodDir)
+        subprocess.run(['ariaDownload.py', '-b', mask,'-w',prodDir])
         print('Finished downloading data for: ',i)
 
-def ARIAtsSetup(csvFile,workdir):
+    print('Creating directories with track numbers and moving products')
+    fileList = glob.glob(os.path.join(prodDir+'/*.nc'))
+    trackDirProdList = []
+    for i in fileList:
+        trackNo = i.split('-')[4]
+        trackDir = os.path.abspath(os.path.join(prodDir,trackNo))
+        trackDirProdList.append(trackDir)
+        if not os.path.exists(trackDir):
+            print('Creating directory: {0}'.format(trackDir))
+            os.makedirs(trackDir)
+            print('Moving product',i,'to',trackDir)
+            shutil.move(i,trackDir)
+            prod = os.path.join(trackDir,i.split('/')[-1])
+            os.symlink(prod,prodDir)
+            # subprocess.run(['ln','-s',i, trackDir])
+        else:
+            print('Moving product',i,'to',trackDir)
+            try:
+                shutil.move(i,trackDir)
+            except shutil.Error:
+                print(i,'already in',trackDir)
+            prod = os.path.join(trackDir,i.split('/')[-1])
+            sym = os.path.join(prodDir,i.split('/')[-1])
+            try:
+                os.symlink(prod,sym)
+            except FileExistsError:
+                print('Link to',i,'exists')
+            # dst = os.path.join(trackDir,i)
+            # try:
+            #     os.symlink(prod,workdir+'/'+i)
+            # except FileExistsError:
+            #     print('Link to',i,'exists')
+            # subprocess.run(['ln','-s',i, trackDir])
+    return trackDirProdList
+
+
+def ARIAtsSetup(csvFile,workdir,*args):
     print('Run ariaTSsetup to crop, extract and prepare stacks for each GPS station')
     df = pd.read_csv(csvFile)
     siteName = list(df.iloc[:,0])
+    prodDir = os.path.join(os.path.abspath(workdir),'products')
+
+    try:
+        trackDirList
+    except UnboundLocalError:
+        trackDirList = []
+        for x in range(len(list(os.walk(prodDir))[0][1])):
+            trackDirList.append(os.path.join(os.path.abspath(prodDir),list(os.walk(prodDir))[0][1][x]))
+        print('trackDirList: ',trackDirList)
 
     for i in siteName:
-        siteDir = os.path.abspath(os.path.join(workdir,i))
-        mask = os.path.join(siteDir,i+'.geojson')
-        subprocess.run(['ariaTSsetup.py','-f','products/*.nc','--mask','download','--bbox',mask,'-w',siteDir])
-        print('Running: ','ariaTSsetup.py','-f','products/*.nc','--mask','download','--bbox',mask,'-w',siteDir)
-        print('Finished time series setup for: ',i)
+        for j in trackDirList:
+            trackNo = str(j.split('/')[-1])
+            siteDir = os.path.abspath(os.path.join(workdir,i,trackNo))
+            print('Working in: ',siteDir)
+            mask = os.path.abspath(os.path.join(workdir,i,i+'.geojson'))
+            products = os.path.join(os.path.abspath(prodDir),trackNo,'*.nc')
+            print('Running: ','ariaTSsetup.py','-f',"'{0}'".format(products),'--mask','download','--bbox',mask,'-w',siteDir)
+            subprocess.run(['ariaTSsetup.py','-f',products,'--mask','download','--bbox',mask,'-w',siteDir])
+            print('Finished time series setup for: ',i)
+    return trackDirList
 
 def prepAria(csvFile,templateFile,workdir):
     print('Run prep_aria.py to prepare for MintPy processing (reference point is chaged to GPS lat/lon)')
@@ -141,26 +195,34 @@ def prepAria(csvFile,templateFile,workdir):
     latList = list(df.iloc[:,2])
 
     for i in range(len(siteName)):
-        siteDir = os.path.abspath(os.path.join(workdir,siteName[i]))
-        mintpyDir = os.path.join(siteDir,'mintpy')
-        stackDir = os.path.join(siteDir,'stack')
-        demDir = os.path.join(siteDir,'DEM/SRTM_3arcsec.dem')
-        incDir = os.path.join(siteDir,'incidenceAngle/')
-        incFile = glob.glob(incDir+'/*.vrt')[0]
-        azDir = os.path.join(siteDir,'azimuthAngle/')
-        azFile = glob.glob(azDir+'/*.vrt')[0]
-        maskDir = os.path.join(siteDir,'mask/watermask.msk')
+        siteLoc = os.path.abspath(os.path.join(workdir,siteName[i]))
+        if not 'DEM' in list(os.walk(siteLoc))[0][1]:
+            trackDirList = list(os.walk(siteLoc))[0][1]
+        else:
+            trackDirList = siteLoc
 
-        template = os.path.abspath(templateFile)
-        ifgramFile = os.path.join(mintpyDir,'inputs/ifgramStack.h5')
+        for x in trackDirList:
+            siteDir = os.path.join(siteLoc,x)
 
-        print('Running: ','prep_aria.py','-w',mintpyDir,'-s',stackDir,'-d',demDir,'-i',incFile,'-a',azFile,'--water-mask',maskDir)
-        subprocess.run(['prep_aria.py','-w',mintpyDir,'-s',stackDir,'-d',demDir,'-i',incFile,'-a',azFile,'--water-mask',maskDir])
-        print('Running: ','cp',template,mintpyDir)
-        subprocess.run(['cp',template,mintpyDir])
-        print('Template file', template, 'copied to:', mintpyDir)
-        print('Running: ','reference_point.py',ifgramFile,'--lat',latList[i],'--lon',lonList[i])
-        subprocess.run(['reference_point.py',ifgramFile,'--lat',str(latList[i]),'--lon',str(lonList[i])])
+            mintpyDir = os.path.join(siteDir,'mintpy')
+            stackDir = os.path.join(siteDir,'stack')
+            demDir = os.path.join(siteDir,'DEM/SRTM_3arcsec.dem')
+            incDir = os.path.join(siteDir,'incidenceAngle/')
+            incFile = glob.glob(incDir+'/*.vrt')[0]
+            azDir = os.path.join(siteDir,'azimuthAngle/')
+            azFile = glob.glob(azDir+'/*.vrt')[0]
+            maskDir = os.path.join(siteDir,'mask/watermask.msk')
+
+            template = os.path.abspath(templateFile)
+            ifgramFile = os.path.join(mintpyDir,'inputs/ifgramStack.h5')
+
+            print('Running: ','prep_aria.py','-w',mintpyDir,'-s',stackDir,'-d',demDir,'-i',incFile,'-a',azFile,'--water-mask',maskDir)
+            subprocess.run(['prep_aria.py','-w',mintpyDir,'-s',stackDir,'-d',demDir,'-i',incFile,'-a',azFile,'--water-mask',maskDir])
+            print('Running: ','cp',template,mintpyDir)
+            subprocess.run(['cp',template,mintpyDir])
+            print('Template file', template, 'copied to:', mintpyDir)
+            # print('Running: ','reference_point.py',ifgramFile,'--lat',latList[i],'--lon',lonList[i])
+            # subprocess.run(['reference_point.py',ifgramFile,'--lat',str(latList[i]),'--lon',str(lonList[i])])
 
 def timeseries(csvFile,templateFile,workdir):
     print('ACTIVATE YOUR MINTPY ENVIRONMENT BEFORE RUNNING THIS STEP')
@@ -169,10 +231,30 @@ def timeseries(csvFile,templateFile,workdir):
     siteName = list(df.iloc[:,0])
     template = os.path.abspath(templateFile)
 
+    for i in range(len(siteName)):
+        siteLoc = os.path.abspath(os.path.join(workdir,siteName[i]))
+        if not 'DEM' in list(os.walk(siteLoc))[0][1]:
+            trackDirList = list(os.walk(siteLoc))[0][1]
+        else:
+            trackDirList = siteLoc
+
+        for x in trackDirList:
+            siteDir = os.path.join(siteLoc,x)
+
+
+
     for i in siteName:
-        siteDir = os.path.abspath(os.path.join(workdir,i))
-        mintpyDir = os.path.join(siteDir,'mintpy')
-        subprocess.run(['smallbaselineApp.py',template],cwd=mintpyDir)
+        siteLoc = os.path.abspath(os.path.join(workdir,i))
+
+        if not 'DEM' in list(os.walk(siteLoc))[0][1]:
+            trackDirList = list(os.walk(siteLoc))[0][1]
+        else:
+            trackDirList = siteLoc
+
+        for x in trackDirList:
+            siteDir = os.path.join(siteLoc,x)
+            mintpyDir = os.path.join(siteDir,'mintpy')
+            subprocess.run(['smallbaselineApp.py',template],cwd=mintpyDir)
 
 def main(inps=None):
     inps = cmdLineParse()
@@ -194,8 +276,8 @@ def main(inps=None):
         prepAria(inps.csvFile,inps.template,inps.workdir)
     else:
         generateMaskfromGPS(inps.csvFile,inps.distance,inps.workdir)
-        ARIAdownload(inps.csvFile,inps.workdir)
-        ARIAtsSetup(inps.csvFile,inps.workdir)
+        trackDirProdList = ARIAdownload(inps.csvFile,inps.workdir)
+        ARIAtsSetup(inps.csvFile,inps.workdir,trackDir=trackDirProdList)
         prepAria(inps.csvFile,inps.template,inps.workdir)
         # timeseries(inps.csvFile,inps.template,inps.workdir)
 
