@@ -31,12 +31,13 @@ def createParser():
     parser = argparse.ArgumentParser(description='Generate mask and create stacks')
     # parser.add_argument('-f', '--file', dest='imgfile', type=str, required=True, help='ARIA file')
     parser.add_argument('-w', '--workdir', dest='workdir', default='./', help='Specify directory to deposit all outputs. Default is local directory where script is launched.')
-    parser.add_argument('-c', '--csv', dest='csvFile', help='CSV file listing GPS stations (SiteID, Lon, Lat)')
+    parser.add_argument('-c', '--csv', dest='csvFile', help='CSV file listing GPS stations (SiteID, Lon, Lat) can be obtained from "http://plugandplay.unavco.org:8080/unrgsac/gsacapi/site/form" but small editing is required')
     parser.add_argument('-tr', '--track', dest='trackDir', help='Products folder with the relevant track number')
     # parser.add_argument('-g', '--gps', dest='gpsSite', help='GPS stations given in the order as: SiteID, Lon, Lat')
     parser.add_argument('-d', '--dist', dest='distance', type=int, help='Distance around GPS station for mask generation (in km)')
     parser.add_argument('-s', '--step', dest='step', default='all', help='Choose step to do (all steps are run from scracth if no step is given) [generateMaskdownload,tsSetup,prepAria,timeseries,skipdownload]')
     parser.add_argument('-t', '--temp', dest='template', default='smallbaselineApp.cfg',help='MintPy template file to used for time series processing')
+    parser.add_argument('-ts', '--timeseries', dest='timeseriesFile',default='timeseries_ERA5_demErr.h5',help='MintPy timeseries file for bootstrapping')
     return parser
 
 def cmdLineParse(iargs = None):
@@ -196,13 +197,21 @@ def prepAria(csvFile,templateFile,workdir):
 
     for i in range(len(siteName)):
         siteLoc = os.path.abspath(os.path.join(workdir,siteName[i]))
-        if not 'DEM' in list(os.walk(siteLoc))[0][1]:
+        if 'DEM' not in list(os.walk(siteLoc))[0][1]:
             trackDirList = list(os.walk(siteLoc))[0][1]
-        else:
-            trackDirList = siteLoc
+        # else:
+        #     trackDirList = siteLoc
 
         for x in trackDirList:
-            siteDir = os.path.join(siteLoc,x)
+            try:
+                siteDir = os.path.join(siteLoc,x)
+                incDir = os.path.join(siteDir,'incidenceAngle/')
+                incFile = glob.glob(incDir+'/*.vrt')[0]
+                azDir = os.path.join(siteDir,'azimuthAngle/')
+                azFile = glob.glob(azDir+'/*.vrt')[0]
+            except IndexError:
+                print('The station and surrounding area does not correspond to track or there is a problem with tsSetup:',x,'\n')
+                continue
 
             mintpyDir = os.path.join(siteDir,'mintpy')
             stackDir = os.path.join(siteDir,'stack')
@@ -231,30 +240,41 @@ def timeseries(csvFile,templateFile,workdir):
     siteName = list(df.iloc[:,0])
     template = os.path.abspath(templateFile)
 
-    for i in range(len(siteName)):
-        siteLoc = os.path.abspath(os.path.join(workdir,siteName[i]))
-        if not 'DEM' in list(os.walk(siteLoc))[0][1]:
-            trackDirList = list(os.walk(siteLoc))[0][1]
-        else:
-            trackDirList = siteLoc
-
-        for x in trackDirList:
-            siteDir = os.path.join(siteLoc,x)
-
-
-
     for i in siteName:
         siteLoc = os.path.abspath(os.path.join(workdir,i))
-
-        if not 'DEM' in list(os.walk(siteLoc))[0][1]:
+        if 'DEM' not in list(os.walk(siteLoc))[0][1]:
             trackDirList = list(os.walk(siteLoc))[0][1]
         else:
             trackDirList = siteLoc
 
         for x in trackDirList:
-            siteDir = os.path.join(siteLoc,x)
-            mintpyDir = os.path.join(siteDir,'mintpy')
-            subprocess.run(['smallbaselineApp.py',template],cwd=mintpyDir)
+            try:
+                siteDir = os.path.join(siteLoc,x)
+                mintpyDir = os.path.join(siteDir,'mintpy')
+                subprocess.run(['smallbaselineApp.py',template],cwd=mintpyDir)
+            except FileNotFoundError:
+                print('No mintpy folder under:',siteDir)
+
+def bootStrap(csvFile,timeseriesFile,workdir):
+    print('ACTIVATE YOUR MINTPY ENVIRONMENT BEFORE RUNNING THIS STEP')
+    df = pd.read_csv(csvFile)
+    siteName = list(df.iloc[:,0])
+
+    for i in siteName:
+        print('Run bootstrapping for:',i)
+        siteLoc = os.path.abspath(os.path.join(workdir,i))
+        if 'DEM' not in list(os.walk(siteLoc))[0][1]:
+            trackDirList = list(os.walk(siteLoc))[0][1]
+        else:
+            trackDirList = siteLoc
+
+        for x in trackDirList:
+            try:
+                siteDir = os.path.join(siteLoc,x)
+                mintpyDir = os.path.join(siteDir,'mintpy')
+                subprocess.run(['bootStrap.py','-f',timeseriesFile],cwd=mintpyDir)
+            except FileNotFoundError:
+                print('No mintpy folder under:',siteDir)
 
 def main(inps=None):
     inps = cmdLineParse()
@@ -270,6 +290,8 @@ def main(inps=None):
         prepAria(inps.csvFile,inps.template,inps.workdir)
     elif inps.step == 'timeseries':
         timeseries(inps.csvFile,inps.template,inps.workdir)
+    elif inps.step == 'bootStrap':
+        bootStrap(inps.csvFile,inps.timeseriesFile,inps.workdir)
     elif inps.step == 'skipdownload':
         generateMaskfromGPS(inps.csvFile,inps.distance,inps.workdir)
         ARIAtsSetup(inps.csvFile,inps.workdir)
