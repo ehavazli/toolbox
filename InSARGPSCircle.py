@@ -130,7 +130,8 @@ def ARIAdownload(csvFile,workdir):
     fileList = glob.glob(os.path.join(prodDir+'/*.nc'))
     trackDirProdList = []
     for i in fileList:
-        trackNo = i.split('-')[4]
+        prod = i.split('/')[-1]
+        trackNo = prod.split('-')[4]
         trackDir = os.path.abspath(os.path.join(prodDir,trackNo))
         trackDirProdList.append(trackDir)
         if not os.path.exists(trackDir):
@@ -138,8 +139,8 @@ def ARIAdownload(csvFile,workdir):
             os.makedirs(trackDir)
             print('Moving product',i,'to',trackDir)
             shutil.move(i,trackDir)
-            prod = os.path.join(trackDir,i.split('/')[-1])
-            os.symlink(prod,prodDir)
+            prodLoc = os.path.join(trackDir,prod)
+            os.symlink(prodLoc,prodDir)
             # subprocess.run(['ln','-s',i, trackDir])
         else:
             print('Moving product',i,'to',trackDir)
@@ -147,10 +148,10 @@ def ARIAdownload(csvFile,workdir):
                 shutil.move(i,trackDir)
             except shutil.Error:
                 print(i,'already in',trackDir)
-            prod = os.path.join(trackDir,i.split('/')[-1])
-            sym = os.path.join(prodDir,i.split('/')[-1])
+            prodLoc = os.path.join(trackDir,prod)
+            sym = os.path.join(prodDir,prodLoc)
             try:
-                os.symlink(prod,sym)
+                os.symlink(prodLoc,sym)
             except FileExistsError:
                 print('Link to',i,'exists')
             # dst = os.path.join(trackDir,i)
@@ -170,6 +171,7 @@ def ARIAtsSetup(csvFile,workdir,*args):
 
     try:
         trackDirList
+
     except UnboundLocalError:
         trackDirList = []
         for x in range(len(list(os.walk(prodDir))[0][1])):
@@ -272,7 +274,7 @@ def bootStrap(csvFile,timeseriesFile,workdir):
             try:
                 siteDir = os.path.join(siteLoc,x)
                 mintpyDir = os.path.join(siteDir,'mintpy')
-                subprocess.run(['bootStrap.py','-f',timeseriesFile],cwd=mintpyDir)
+                subprocess.run(['bootStrap.py','-f',timeseriesFile,'-o',i+'_bootVel.h5'],cwd=mintpyDir)
             except FileNotFoundError:
                 print('No mintpy folder under:',siteDir)
 
