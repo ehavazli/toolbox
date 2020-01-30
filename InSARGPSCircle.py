@@ -35,7 +35,7 @@ def createParser():
     parser.add_argument('-tr', '--track', dest='trackDir', help='Products folder with the relevant track number')
     # parser.add_argument('-g', '--gps', dest='gpsSite', help='GPS stations given in the order as: SiteID, Lon, Lat')
     parser.add_argument('-d', '--dist', dest='distance', type=int, help='Distance around GPS station for mask generation (in km)')
-    parser.add_argument('-s', '--step', dest='step', default='all', help='Choose step to do (all steps are run from scracth if no step is given) [generateMaskdownload,tsSetup,prepAria,timeseries,skipdownload]')
+    parser.add_argument('-s', '--step', dest='step', default='all', help='Choose step to do (all steps are run from scracth if no step is given) [generateMask,download,tsSetup,prepAria,timeseries,bootStrap,skipdownload]')
     parser.add_argument('-t', '--temp', dest='template', default='smallbaselineApp.cfg',help='MintPy template file to used for time series processing')
     parser.add_argument('-ts', '--timeseries', dest='timeseriesFile',default='timeseries_ERA5_demErr.h5',help='MintPy timeseries file for bootstrapping')
     return parser
