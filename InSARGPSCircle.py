@@ -310,11 +310,8 @@ def copyTS(csvFile,workdir):
                     print('Creating directory: {0}'.format(copyDir))
                     os.makedirs(copyDir)
                     # print('cp', mintpyDir+'/*.h5', copyDir)
-                    try:
-                        for file in glob.glob(mintpyDir+'/*'):
-                            shutil.copy(file, copyDir)
-                    except IsADirectoryError:
-                        continue
+                    for file in glob.glob(mintpyDir+'/*.h5'):
+                        shutil.copy(file, copyDir)
                 else:
                     print('Directory {0} already exists.'.format(copyDir))
             except FileNotFoundError:
