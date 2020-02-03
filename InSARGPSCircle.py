@@ -278,6 +278,48 @@ def bootStrap(csvFile,timeseriesFile,workdir):
             except FileNotFoundError:
                 print('No mintpy folder under:',siteDir)
 
+def copyTS(csvFile,workdir):
+    # print('ACTIVATE YOUR MINTPY ENVIRONMENT BEFORE RUNNING THIS STEP')
+    df = pd.read_csv(csvFile)
+    siteName = list(df.iloc[:,0])
+
+    for i in range(len(siteName)):
+        siteDir = os.path.join(workdir,'COPY',siteName[i])
+        if not os.path.exists(siteDir):
+            print('Creating directory: {0}'.format(siteDir))
+            os.makedirs(siteDir)
+        else:
+            print('Directory {0} already exists.'.format(siteDir))
+
+    for i in siteName:
+        print('Copying data from:',i)
+        siteLoc = os.path.abspath(os.path.join(workdir,i))
+        trackDirList = list(os.walk(siteLoc))[0][1]
+
+        # if 'DEM' not in list(os.walk(siteLoc))[0][1]:
+        #     trackDirList = list(os.walk(siteLoc))[0][1]
+        # else:
+        #     trackDirList = siteLoc
+
+        for x in trackDirList:
+            try:
+                siteDir = os.path.join(siteLoc,x)
+                mintpyDir = os.path.join(siteDir,'mintpy')
+                copyDir = os.path.abspath(os.path.join(workdir,'COPY',i,x,))
+                if not os.path.exists(copyDir):
+                    print('Creating directory: {0}'.format(copyDir))
+                    os.makedirs(copyDir)
+                    # print('cp', mintpyDir+'/*.h5', copyDir)
+                    try:
+                        for file in glob.glob(mintpyDir+'/*'):
+                            shutil.copy(file, copyDir)
+                    except IsADirectoryError:
+                        continue
+                else:
+                    print('Directory {0} already exists.'.format(copyDir))
+            except FileNotFoundError:
+                print('No mintpy folder under:',siteDir)
+
 def main(inps=None):
     inps = cmdLineParse()
     # masksDir = os.path.join(inps.workdir,'masks')
@@ -294,6 +336,8 @@ def main(inps=None):
         timeseries(inps.csvFile,inps.template,inps.workdir)
     elif inps.step == 'bootStrap':
         bootStrap(inps.csvFile,inps.timeseriesFile,inps.workdir)
+    elif inps.step == 'copyTS':
+        copyTS(inps.csvFile,inps.workdir)
     elif inps.step == 'skipdownload':
         generateMaskfromGPS(inps.csvFile,inps.distance,inps.workdir)
         ARIAtsSetup(inps.csvFile,inps.workdir)
