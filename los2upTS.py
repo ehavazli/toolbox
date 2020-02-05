@@ -46,7 +46,7 @@ def main(inps=None):
     bperp = h5ts.get('bperp')
     dates = h5ts.get('date')
 
-    losU = Vset/(np.cos(Inc))
+    losU = Vset*(np.cos(Inc))
 
     dset = h5Out.create_dataset('bperp', data=bperp)
     dset = h5Out.create_dataset('date',data=dates)
