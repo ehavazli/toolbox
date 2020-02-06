@@ -9,7 +9,7 @@ import os
 import numpy as np
 from sklearn.utils import resample
 from mintpy.utils import readfile, writefile
-from ARIAtools import progBar
+from mintpy.utils import ptime
 
 def createParser():
     '''
@@ -40,7 +40,7 @@ def bootstrap(timeseriesFile,bootCount):
     dateList = tsData.get_date_list()
     sampleNo = len(dateList)
     vel = np.zeros((bootCount,(length*width)))
-    prog_bar = progBar.progressBar(maxValue=bootCount,prefix='Calculating ')
+    prog_bar = ptime.progressBar(maxValue=bootCount,prefix='Calculating ')
     for i in range(bootCount):
         bootSamples = list(np.sort(resample(dateList, replace=True, n_samples=sampleNo)))
         # dropList = [x for x in dateList if x not in bootSamples]
