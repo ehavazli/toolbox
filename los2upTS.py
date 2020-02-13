@@ -34,15 +34,14 @@ def main(inps=None):
     h5ts = h5py.File(inps.tsFile,'r')
     h5Out = h5py.File(inps.outName, 'w')
 
-    Iset = h5Geo.get('incidenceAngle').value
-    Inc = Iset*(np.pi/180.)
+    Inc = h5Geo.get('incidenceAngle').value
     attrs = h5ts.attrs
 
     Vset = h5ts.get('timeseries')
     bperp = h5ts.get('bperp')
     dates = h5ts.get('date')
 
-    losU = Vset*(np.cos(Inc))
+    losU = Vset/(np.cos(Inc))
 
     dset = h5Out.create_dataset('bperp', data=bperp)
     dset = h5Out.create_dataset('date',data=dates)
