@@ -38,7 +38,7 @@ def main(inps=None):
     attrs = h5Vel.attrs
 
     Vset = h5Vel.get('velocity')
-    losU = Vset/(np.cos(Inc))
+    losU = Vset*(np.cos(Inc))
     dset = h5Out.create_dataset('velocity', data=losU)
 
     for key, value in h5Vel.attrs.items():
