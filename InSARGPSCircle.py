@@ -12,12 +12,14 @@ from shapely.ops import transform
 from functools import partial
 from osgeo import ogr
 import pandas as pd
+import numpy as np
 import subprocess
 import os, sys
 import shutil
 import timeit
 import pyproj
 import glob
+import h5py
 
 import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -35,7 +37,7 @@ def createParser():
     parser.add_argument('-tr', '--track', dest='trackDir', help='Products folder with the relevant track number')
     # parser.add_argument('-g', '--gps', dest='gpsSite', help='GPS stations given in the order as: SiteID, Lon, Lat')
     parser.add_argument('-d', '--dist', dest='distance', type=int, help='Distance around GPS station for mask generation (in km)')
-    parser.add_argument('-s', '--step', dest='step', default='all', help='Choose step to do (all steps are run from scracth if no step is given) [generateMask,download,tsSetup,prepAria,timeseries,bootStrap,skipdownload]')
+    parser.add_argument('-s', '--step', dest='step', default='all', help='Choose step to do (all steps are run from scracth if no step is given) [generateMask,download,tsSetup,prepAria,timeseries,bootStrap,dloadGPS,mergeGPSup,skipdownload]')
     parser.add_argument('-t', '--temp', dest='template', default='smallbaselineApp.cfg',help='MintPy template file to used for time series processing')
     parser.add_argument('-ts', '--timeseries', dest='timeseriesFile',default='timeseries_ERA5_demErr.h5',help='MintPy timeseries file for bootstrapping')
     return parser
@@ -257,26 +259,118 @@ def timeseries(csvFile,templateFile,workdir):
             except FileNotFoundError:
                 print('No mintpy folder under:',siteDir)
 
+def los2up(velFile,outName):
+    from mintpy.utils import readfile, writefile
+
+    VelInsar,atrVel = readfile.read(velFile,datasetName='velocity')
+    StdInsar,atrStd = readfile.read(velFile,datasetName='velocityStd')
+
+    incAng = np.float(atrVel['incidenceAngle'])*(np.pi/180)
+    losU = VelInsar*(np.cos(incAng))
+
+    dsDict = dict()
+    dsDict['velocity'] = losU
+    dsDict['velocityStd'] = StdInsar
+
+    writefile.write(datasetDict=dsDict, out_file=outName, metadata=atrVel)
+
 def bootStrap(csvFile,timeseriesFile,workdir):
     print('ACTIVATE YOUR MINTPY ENVIRONMENT BEFORE RUNNING THIS STEP')
+
     df = pd.read_csv(csvFile)
     siteName = list(df.iloc[:,0])
+    lonList = list(df.iloc[:,1])
+    latList = list(df.iloc[:,2])
 
-    for i in siteName:
-        print('Run bootstrapping for:',i)
-        siteLoc = os.path.abspath(os.path.join(workdir,i))
-        if 'DEM' not in list(os.walk(siteLoc))[0][1]:
+    for i in range(len(siteName)):
+        print('**************************************************************')
+        print('Working on:',siteName[i])
+        siteLoc = os.path.abspath(os.path.join(workdir,siteName[i]))
+        try:
             trackDirList = list(os.walk(siteLoc))[0][1]
-        else:
-            trackDirList = siteLoc
+        except:
+            print('No track folder found under:',siteLoc)
+
+        # if 'DEM' not in list(os.walk(siteLoc))[0][1]:
+        #     trackDirList = list(os.walk(siteLoc))[0][1]
+        # else:
+        #     trackDirList = siteLoc
 
         for x in trackDirList:
             try:
                 siteDir = os.path.join(siteLoc,x)
-                mintpyDir = os.path.join(siteDir,'mintpy')
-                subprocess.run(['bootStrap.py','-f',timeseriesFile,'-o',i+'_bootVel.h5'],cwd=mintpyDir)
-            except FileNotFoundError:
+                # mintpyDir = os.path.join(siteDir,'mintpy')
+                print('Change reference point to station:',siteName[i])
+                subprocess.run(['reference_point.py',timeseriesFile,'--lat',str(latList[i]),'--lon',str(lonList[i])],cwd=siteDir)
+
+                print('Run bootstrapping for:',siteName[i])
+                subprocess.run(['bootStrap.py','-f',timeseriesFile,'-o',siteName[i]+'_'+x+'_bootVel.h5'],cwd=siteDir)
+
+                print('Convert velocity to UP')
+                los2up(siteDir+'/'+siteName[i]+'_'+x+'_bootVel.h5',siteDir+'/'+siteName[i]+'_'+x+'_UP_bootVel.h5')
+
+                ##Mask new velocity file with spatial coherence
+                print('Mask new velocity file with spatial coherence')
+                subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=siteDir)
+                subprocess.run(['mask.py',siteDir+'/'+siteName[i]+'_'+x+'_UP_bootVel.h5','-m','maskSpatialCoh.h5'],cwd=siteDir)
+
+            except:
                 print('No mintpy folder under:',siteDir)
+
+def mergeGPS(csvFile,workdir,GPSdataDir='./GPS'):
+    from mintpy.objects.gps import GPS
+    from mintpy.utils import readfile, writefile
+
+    velList = sorted(glob.glob(workdir+'/*/*/*_*_UP_bootVel_msk.h5'))
+    df = pd.read_csv(csvFile)
+    siteName = list(df.iloc[:,0])
+    for i in range(len(siteName)):
+        print('**************************************************************')
+        print('Station:',siteName[i])
+        startDate = readfile.read_attribute(velList[i])['START_DATE']
+        try:
+            gps_obj = GPS(site=siteName[i], data_dir=GPSdataDir)
+            gps_obj.open()
+        except:
+            print('Station',siteName[i],'cannot be downloaded')
+            continue
+
+        print('Reading up displacement of values')
+        gps_obj.read_displacement(start_date=startDate)
+        dis_u = gps_obj.dis_u
+        dates = gps_obj.dates
+        dateList = []
+        for k in dates:
+            dateList.append((float(k.strftime("%j"))-1) / 366 + float(k.strftime("%Y")))
+
+        if len(dateList) < 100:
+            print('There are less than 100 displacement values in GPS timeseries')
+        elif dateList[-1] - dateList[0] < 3.:
+            print('Timeseries length is shorter than 3 years:',str(dateList[-1] - dateList[0]))
+        else:
+            # Solve for mx+c, coef[0][0] = m, coef[0][1] = c
+            coef = np.polyfit(dateList,dis_u,1,rcond=None,full=True)
+            velGPS = coef[0][0]
+            # Sum of squared residuals
+            StdGPS = np.sqrt(coef[1]/len(dateList))
+            print('GPS up velocity for',siteName[i],': ',velGPS,StdGPS)
+            velInsar,atr = readfile.read(velList[i],datasetName='velocity')
+            StdInsar,atrStd = readfile.read(velList[i],datasetName='velocityStd')
+            jointVel = np.where(velInsar==0, velInsar,velInsar+velGPS)
+            # jointVel = velInsar + velGPS
+            jointStd = np.where(velInsar==0, velInsar,np.sqrt(StdInsar**2+StdGPS**2))
+            print('Joint Velocity and Standard deviation calculated')
+            print('Joint Vel for',siteName[i],': ',jointVel.max(),jointStd.max())
+
+            dsDict = dict()
+            dsDict['velocity'] = jointVel
+            dsDict['velocityStd'] = jointStd
+            outdirList = velList[i].split('/')[0:-1]
+            outdir = os.path.join(*outdirList)
+            velName = velList[i].split('/')[-1]
+            index = velName.find('bootVel_msk.h5')
+            outFileName = os.path.abspath(os.path.join(outdir,velName[:index]+'GPSadded_'+velName[index:]))
+            writefile.write(datasetDict=dsDict, out_file=outFileName, metadata=atr)
 
 def copyTS(csvFile,workdir):
     # print('ACTIVATE YOUR MINTPY ENVIRONMENT BEFORE RUNNING THIS STEP')
@@ -333,6 +427,8 @@ def main(inps=None):
         timeseries(inps.csvFile,inps.template,inps.workdir)
     elif inps.step == 'bootStrap':
         bootStrap(inps.csvFile,inps.timeseriesFile,inps.workdir)
+    elif inps.step == 'mergeGPS':
+        mergeGPS(inps.csvFile,inps.workdir)
     elif inps.step == 'copyTS':
         copyTS(inps.csvFile,inps.workdir)
     elif inps.step == 'skipdownload':
