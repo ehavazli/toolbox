@@ -274,6 +274,49 @@ def los2up(velFile,outName):
 
     writefile.write(datasetDict=dsDict, out_file=outName, metadata=atrVel)
 
+def referenceBox(lat,lon,circleSize,velocityFile,workdir,velArr='default'):
+    from mintpy.utils import readfile,writefile, utils as ut
+
+    refBoxGeo = geodesic_point_buffer(lat, lon, circleSize)
+    vel_file  = os.path.abspath(velocityFile)
+    velocity, atr = readfile.read(vel_file,datasetName='velocity')
+    velocityStd, atr = readfile.read(vel_file,datasetName='velocityStd')
+
+    if velArr != 'default':
+        velocity = velArr
+    else:
+        velocity = velocity
+
+    coord = ut.coordinate(atr)
+    coord.open()
+
+    yList=[]
+    xList=[]
+    for i in refBoxGeo:
+        y, x = coord.geo2radar(i[1], i[0])[0:2]
+        yList.append(y)
+        xList.append(x)
+
+    ymax = max(yList)
+    ymin = min(yList)
+    yRange = np.arange(ymin,ymax+1)
+    xmax = max(xList)
+    xmin = min(xList)
+    xRange = np.arange(xmin,xmax+1)
+
+    xx, yy = np.meshgrid(xRange, yRange, sparse=True)
+    # velocity = np.nan_to_num(velocity,copy=True)
+    boxMean = np.nanmean(velocity[xx,yy])
+    print('BOX MEAN:',boxMean)
+    # refVel = velocity - boxMean
+
+    return boxMean
+
+    # dsDict = dict()
+    # dsDict['velocity'] = refVel
+    # dsDict['velocityStd'] = velocityStd
+    # writefile.write(datasetDict=dsDict, out_file=outFileName, metadata=atr)
+
 def bootStrap(csvFile,timeseriesFile,workdir):
     print('ACTIVATE YOUR MINTPY ENVIRONMENT BEFORE RUNNING THIS STEP')
 
@@ -320,19 +363,21 @@ def bootStrap(csvFile,timeseriesFile,workdir):
 def mergeGPS(csvFile,workdir,GPSdataDir='./GPS'):
     from mintpy.objects.gps import GPS
     from mintpy.utils import readfile, writefile
+    import matplotlib.pyplot as plt
 
     velList = sorted(glob.glob(workdir+'/*/*/*_*_UP_bootVel_msk.h5'))
     df = pd.read_csv(csvFile)
-    siteName = list(df.iloc[:,0])
-    for i in range(len(siteName)):
+    # siteName = list(df.iloc[:,0])
+    for i in range(len(velList)):
         print('**************************************************************')
-        print('Station:',siteName[i])
+        siteName = velList[i].split('/')[-3]
+        print('Station:',siteName)
         startDate = readfile.read_attribute(velList[i])['START_DATE']
         try:
-            gps_obj = GPS(site=siteName[i], data_dir=GPSdataDir)
+            gps_obj = GPS(site=siteName, data_dir=GPSdataDir)
             gps_obj.open()
         except:
-            print('Station',siteName[i],'cannot be downloaded')
+            print('Station',siteName,'cannot be downloaded')
             continue
 
         print('Reading up displacement of values')
@@ -349,21 +394,43 @@ def mergeGPS(csvFile,workdir,GPSdataDir='./GPS'):
             print('Timeseries length is shorter than 3 years:',str(dateList[-1] - dateList[0]))
         else:
             # Solve for mx+c, coef[0][0] = m, coef[0][1] = c
-            coef = np.polyfit(dateList,dis_u,1,rcond=None,full=True)
+            coef = np.polyfit(dateList,dis_u,1,full=True)
             velGPS = coef[0][0]
             # Sum of squared residuals
             StdGPS = np.sqrt(coef[1]/len(dateList))
-            print('GPS up velocity for',siteName[i],': ',velGPS,StdGPS)
+            # if np.abs(StdGPS/2) >= np.abs(velGPS):
+            #     print('GPS velocity for station',siteName,'is statistically insignificant:',velGPS,StdGPS)
+            #     continue
+            # else:
+            print('GPS up velocity for',siteName,': ',velGPS,StdGPS)
+            poly1d_fn = np.poly1d(coef[0])
+            fig,ax = plt.subplots()
+            plt.scatter(dateList, dis_u)
+            # plt.plot(dateList,m*dates+c,'red')
+            plt.plot(dateList,dis_u,'.')
+            plt.plot(dateList, poly1d_fn(dateList), '--r')
+
+            # cbar = plt.colorbar(ax.imshow(obs_out,cmap='jet'))
+            plt.savefig(os.path.join(inps.workdir,siteName+'Vel.png'),format='png',dpi=300,quality=95)
+            plt.close()
             velInsar,atr = readfile.read(velList[i],datasetName='velocity')
             StdInsar,atrStd = readfile.read(velList[i],datasetName='velocityStd')
+            # velInsar = np.nan_to_num(velInsar,copy=True)
+            # StdInsar = np.nan_to_num(StdInsar,copy=True)
             jointVel = np.where(velInsar==0, velInsar,velInsar+velGPS)
             # jointVel = velInsar + velGPS
             jointStd = np.where(velInsar==0, velInsar,np.sqrt(StdInsar**2+StdGPS**2))
             print('Joint Velocity and Standard deviation calculated')
-            print('Joint Vel for',siteName[i],': ',jointVel.max(),jointStd.max())
+            # print('Joint Vel for',siteName,': ',jointVel,jointStd)
+
+            lon = np.float32(df[df['SiteID'].str.contains(siteName)]['Lon'])[0]
+            lat = np.float32(df[df['SiteID'].str.contains(siteName)]['Lat'])[0]
+            circleSize = 0.5 ##KM distance around reference point
+            boxMean = referenceBox(lat,lon,circleSize,velList[i],workdir,velArr=jointVel)
+            print('Referenced velocity value is:',boxMean)
 
             dsDict = dict()
-            dsDict['velocity'] = jointVel
+            dsDict['velocity'] = jointVel - boxMean
             dsDict['velocityStd'] = jointStd
             outdirList = velList[i].split('/')[0:-1]
             outdir = os.path.join(*outdirList)
