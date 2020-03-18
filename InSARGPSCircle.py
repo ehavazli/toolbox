@@ -122,11 +122,11 @@ def ARIAdownload(csvFile,workdir):
     siteName = list(df.iloc[:,0])
     prodDir = os.path.join(os.path.abspath(workdir),'products')
 
-    for i in siteName:
-        mask = os.path.abspath(os.path.join(workdir,i,i+'.geojson'))
-        print('Running: ','ariaDownload.py', '-b', mask,'-w',prodDir)
-        subprocess.run(['ariaDownload.py', '-b', mask,'-w',prodDir])
-        print('Finished downloading data for: ',i)
+#    for i in siteName:
+#        mask = os.path.abspath(os.path.join(workdir,i,i+'.geojson'))
+#        print('Running: ','ariaDownload.py', '-b', mask,'-w',prodDir)
+#        subprocess.run(['ariaDownload.py', '-b', mask,'-w',prodDir])
+#        print('Finished downloading data for: ',i)
 
     print('Creating directories with track numbers and moving products')
     fileList = glob.glob(os.path.join(prodDir+'/*.nc'))
@@ -142,7 +142,7 @@ def ARIAdownload(csvFile,workdir):
             print('Moving product',i,'to',trackDir)
             shutil.move(i,trackDir)
             prodLoc = os.path.join(trackDir,prod)
-            os.symlink(prodLoc,prodDir)
+            os.symlink(prodLoc,prodDir,target_is_directory=True)
             # subprocess.run(['ln','-s',i, trackDir])
         else:
             print('Moving product',i,'to',trackDir)
@@ -153,7 +153,7 @@ def ARIAdownload(csvFile,workdir):
             prodLoc = os.path.join(trackDir,prod)
             sym = os.path.join(prodDir,prodLoc)
             try:
-                os.symlink(prodLoc,sym)
+                os.symlink(prodLoc,prodDir,target_is_directory=True)
             except FileExistsError:
                 print('Link to',i,'exists')
             # dst = os.path.join(trackDir,i)
@@ -342,20 +342,21 @@ def bootStrap(csvFile,timeseriesFile,workdir):
         for x in trackDirList:
             try:
                 siteDir = os.path.join(siteLoc,x)
-                # mintpyDir = os.path.join(siteDir,'mintpy')
-                print('Change reference point to station:',siteName[i])
-                subprocess.run(['reference_point.py',timeseriesFile,'--lat',str(latList[i]),'--lon',str(lonList[i])],cwd=siteDir)
+                mintpyDir = os.path.join(siteDir,'mintpy')
+               # print('reference_point.py',timeseriesFile,'--lat',str(latList[i]),'--lon',str(lonList[i]))
+               # print('Change reference point to station:',siteName[i])
+               # subprocess.run(['reference_point.py',timeseriesFile,'--lat',str(latList[i]),'--lon',str(lonList[i])],cwd=mintpyDir)
 
                 print('Run bootstrapping for:',siteName[i])
-                subprocess.run(['bootStrap.py','-f',timeseriesFile,'-o',siteName[i]+'_'+x+'_bootVel.h5'],cwd=siteDir)
+                subprocess.run(['bootStrap.py','-f',timeseriesFile,'-o',siteName[i]+'_'+x+'_bootVel.h5'],cwd=mintpyDir)
 
                 print('Convert velocity to UP')
-                los2up(siteDir+'/'+siteName[i]+'_'+x+'_bootVel.h5',siteDir+'/'+siteName[i]+'_'+x+'_UP_bootVel.h5')
+                los2up(siteDir+'/mintpy/'+siteName[i]+'_'+x+'_bootVel.h5',siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel.h5')
 
                 ##Mask new velocity file with spatial coherence
                 print('Mask new velocity file with spatial coherence')
-                subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=siteDir)
-                subprocess.run(['mask.py',siteDir+'/'+siteName[i]+'_'+x+'_UP_bootVel.h5','-m','maskSpatialCoh.h5'],cwd=siteDir)
+                subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=mintpyDir)
+                subprocess.run(['mask.py',siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel.h5','-m','maskSpatialCoh.h5'],cwd=mintpyDir)
 
             except:
                 print('No mintpy folder under:',siteDir)
