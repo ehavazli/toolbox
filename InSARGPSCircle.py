@@ -452,7 +452,7 @@ def mergeGPS(csvFile,workdir):
     df = pd.read_csv(csvFile)
     siteName = list(df.iloc[:,0])
     velList = sorted(glob.glob(workdir+'/*/*/*_*_UP_bootVel_msk.h5'))
-    MidasVel = pd.read_csv(velFile,header=None, delimiter=r"\s+")
+    MidasVel = pd.read_csv(Velfile_name,header=None, delimiter=r"\s+")
 
     for i in range(len(velList)):
         siteName = velList[i].split('/')[-1][0:4]
