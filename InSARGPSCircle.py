@@ -449,12 +449,10 @@ def mergeGPS(csvFile,workdir):
     urllib.request.urlretrieve(urlVel, Velfile_name)
     urllib.request.urlretrieve(urlReadme, RDMfile_name)
 
-    MidasVel = pd.read_csv(velFile,header=None, delimiter=r"\s+")
-    MidasVel[MidasVel[0].str.contains(siteName)]['Lat']).round(2)
-
     df = pd.read_csv(csvFile)
     siteName = list(df.iloc[:,0])
     velList = sorted(glob.glob(workdir+'/*/*/*_*_UP_bootVel_msk.h5'))
+    MidasVel = pd.read_csv(velFile,header=None, delimiter=r"\s+")
 
     for i in range(len(velList)):
         siteName = velList[i].split('/')[-1][0:4]
