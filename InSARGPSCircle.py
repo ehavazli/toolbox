@@ -451,7 +451,7 @@ def mergeGPS(csvFile,workdir):
 
     df = pd.read_csv(csvFile)
     siteName = list(df.iloc[:,0])
-    velList = sorted(glob.glob(workdir+'/*/*/*_*_UP_bootVel_msk.h5'))
+    velList = sorted(glob.glob(workdir+'/*/*/mintpy/*_*_UP_bootVel_msk.h5'))
     MidasVel = pd.read_csv(Velfile_name,header=None, delimiter=r"\s+")
 
     for i in range(len(velList)):
@@ -459,6 +459,13 @@ def mergeGPS(csvFile,workdir):
         velGPS = MidasVel[MidasVel[0].str.contains(siteName)][10]
         stdGPS = MidasVel[MidasVel[0].str.contains(siteName)][13]
         print(siteName,GPSvel,GPSunc)
+
+        # siteLoc = os.path.abspath(os.path.join(workdir,siteName))
+        # trackDirList = list(os.walk(siteLoc))[0][1]
+        #
+        # for x in trackDirList:
+        #     siteDir = os.path.join(siteLoc,x)
+        #     mintpyDir = os.path.join(siteDir,'mintpy')
 
         velInsar,atr = readfile.read(velList[i],datasetName='velocity')
         StdInsar,atrStd = readfile.read(velList[i],datasetName='velocityStd')
