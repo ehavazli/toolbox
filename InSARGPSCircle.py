@@ -458,7 +458,7 @@ def mergeGPS(csvFile,workdir):
         siteName = velList[i].split('/')[-1][0:4]
         velGPS = MidasVel[MidasVel[0].str.contains(siteName)][10]
         stdGPS = MidasVel[MidasVel[0].str.contains(siteName)][13]
-        print(siteName,GPSvel,GPSunc)
+        print(siteName,velGPS,stdGPS)
 
         # siteLoc = os.path.abspath(os.path.join(workdir,siteName))
         # trackDirList = list(os.walk(siteLoc))[0][1]
