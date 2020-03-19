@@ -441,6 +441,7 @@ def bootStrap(csvFile,timeseriesFile,workdir):
 
 def mergeGPS(csvFile,workdir):
     import urllib.request
+    from mintpy.utils import readfile, writefile
 
     urlVel = 'http://geodesy.unr.edu/velocities/midas.IGS14.txt'
     urlReadme = 'http://geodesy.unr.edu/velocities/midas.readme.txt'
