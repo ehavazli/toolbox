@@ -318,7 +318,7 @@ def referenceBox(lat,lon,circleSize,velocityFile,workdir,velArr='default'):
 
 def bootStrap(csvFile,timeseriesFile,workdir):
     print('ACTIVATE YOUR MINTPY ENVIRONMENT BEFORE RUNNING THIS STEP')
-
+    from mintpy.utils import readfile, writefile
     df = pd.read_csv(csvFile)
     siteName = list(df.iloc[:,0])
     lonList = list(df.iloc[:,1])
@@ -353,9 +353,30 @@ def bootStrap(csvFile,timeseriesFile,workdir):
                 los2up(siteDir+'/mintpy/'+siteName[i]+'_'+x+'_bootVel.h5',siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel.h5')
 
                 ##Mask new velocity file with spatial coherence
+               # print('Mask new velocity file with spatial coherence')
+               # subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=mintpyDir)
+               # subprocess.run(['mask.py',siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel.h5','-m','maskSpatialCoh.h5'],cwd=mintpyDir)
+
+
+                lon = np.float32(df[df['SiteID'].str.contains(siteName[i])]['Lon'])[0]
+                lat = np.float32(df[df['SiteID'].str.contains(siteName[i])]['Lat'])[0]
+                circleSize = 0.5 ##KM distance around reference point
+                boxMean = referenceBox(lat,lon,circleSize,siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel.h5',workdir)
+                print('Referenced velocity value is:',boxMean)
+                
+                bootVel,atr = readfile.read(siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel.h5',datasetName='velocity')
+                bootStd,atr = readfile.read(siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel.h5',datasetName='velocityStd')
+                print('FILES READ')
+                dsDict = dict()
+                dsDict['velocity'] = bootVel - boxMean
+                dsDict['velocityStd'] = bootStd
+                outFileName = os.path.abspath(os.path.join(siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel_refCircle.h5'))
+                writefile.write(datasetDict=dsDict, out_file=outFileName, metadata=atr)
+
+                ##Mask new velocity file with spatial coherence
                 print('Mask new velocity file with spatial coherence')
                 subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=mintpyDir)
-                subprocess.run(['mask.py',siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel.h5','-m','maskSpatialCoh.h5'],cwd=mintpyDir)
+                subprocess.run(['mask.py',siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel_refCircle.h5','-m','maskSpatialCoh.h5'],cwd=mintpyDir)
 
             except:
                 print('No mintpy folder under:',siteDir)
@@ -453,10 +474,12 @@ def mergeGPS(csvFile,workdir):
     df = pd.read_csv(csvFile)
     siteName = list(df.iloc[:,0])
     velList = sorted(glob.glob(workdir+'/*/*/mintpy/*_*_UP_bootVel_msk.h5'))
+    print(velList)
     MidasVel = pd.read_csv(Velfile_name,header=None, delimiter=r"\s+")
 
     for i in range(len(velList)):
         siteName = velList[i].split('/')[-1][0:4]
+        print(MidasVel[MidasVel[0].str.contains(siteName)][10])
         velGPS = np.float32(MidasVel[MidasVel[0].str.contains(siteName)][10])[0]
         stdGPS = np.float32(MidasVel[MidasVel[0].str.contains(siteName)][13])[0]
         print(siteName,velGPS,stdGPS)
