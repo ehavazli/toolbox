@@ -13,6 +13,8 @@ import glob
 import gdal
 from scipy.io import netcdf
 import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.use('Agg')
 from mintpy.utils import readfile,writefile, utils as ut
 from mintpy.utils import plot as pp
 
@@ -206,26 +208,26 @@ def mintpy2grd(csvFile,inputdir,workdir,filewld):
         dataStd, atrStd = readfile.read(i, datasetName='velocityStd')
 
         # 2. Check the reference point
-        refLon = np.float32(readfile.read_attribute(i)['REF_LON']).round(2)
-        refLat = np.float32(readfile.read_attribute(i)['REF_LAT']).round(2)
-        siteName = i.split('/')[-1].split('_')[0]
-        stationLon = np.float32(df[df['SiteID'].str.contains(siteName)]['Lon']).round(2)
-        stationLat = np.float32(df[df['SiteID'].str.contains(siteName)]['Lat']).round(2)
-        if np.isclose(refLon,stationLon):
-            # print('Lon is close enough',refLon,stationLon)
-            if np.isclose(refLat,stationLat):
-                # print('Lat is close enough',refLat,stationLat)
-                # 3. Write GMT .grd file
-                outbaseVel = os.path.abspath(os.path.join(inps.workdir,'{}.grd'.format(pp.auto_figure_title(i, datasetNames='velocity',inps_dict=vars(inps)))))
-                outbaseStd = os.path.abspath(os.path.join(inps.workdir,'{}Std.grd'.format(pp.auto_figure_title(i, datasetNames='velocityStd',inps_dict=vars(inps)))))
-                outVelList.append(outbaseVel)
-                outStdList.append(outbaseStd)
+       # refLon = np.float32(readfile.read_attribute(i)['REF_LON']).round(2)
+       # refLat = np.float32(readfile.read_attribute(i)['REF_LAT']).round(2)
+       # siteName = i.split('/')[-1].split('_')[0]
+       # stationLon = np.float32(df[df['SiteID'].str.contains(siteName)]['Lon']).round(2)
+       # stationLat = np.float32(df[df['SiteID'].str.contains(siteName)]['Lat']).round(2)
+       # if np.isclose(refLon,stationLon):
+       #     # print('Lon is close enough',refLon,stationLon)
+       #     if np.isclose(refLat,stationLat):
+       #         # print('Lat is close enough',refLat,stationLat)
+        # 3. Write GMT .grd file
+        outbaseVel = os.path.abspath(os.path.join(inps.workdir,'{}.grd'.format(pp.auto_figure_title(i, datasetNames='velocity',inps_dict=vars(inps)))))
+        outbaseStd = os.path.abspath(os.path.join(inps.workdir,'{}Std.grd'.format(pp.auto_figure_title(i, datasetNames='velocityStd',inps_dict=vars(inps)))))
+        outVelList.append(outbaseVel)
+        outStdList.append(outbaseStd)
 
-                outfileVel = write_grd_file(dataVel, atrVel, outbaseVel)
-                outfileStd = write_grd_file(dataStd, atrStd, outbaseStd)
-                print('Done.')
-        else:
-            print('Reference point is not on station',siteName,refLon,stationLon)
+        outfileVel = write_grd_file(dataVel, atrVel, outbaseVel)
+        outfileStd = write_grd_file(dataStd, atrStd, outbaseStd)
+        print('Done.')
+        #else:
+        #    print('Reference point is not on station',siteName,refLon,stationLon)
     return outVelList, outStdList
 
 
