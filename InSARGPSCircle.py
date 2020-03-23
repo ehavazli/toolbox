@@ -460,7 +460,7 @@ def bootStrap(csvFile,timeseriesFile,workdir):
 #             outFileName = os.path.abspath(os.path.join(outdir,velName[:index]+'GPSadded_'+velName[index:]))
 #             writefile.write(datasetDict=dsDict, out_file=outFileName, metadata=atr)
 
-def mergeGPS(csvFile,workdir):
+def mergeGPS(csvFile,workdir,velFile='*UP_bootVel_refCircle.h5'):
     import urllib.request
     from mintpy.utils import readfile, writefile
 
@@ -473,13 +473,24 @@ def mergeGPS(csvFile,workdir):
 
     df = pd.read_csv(csvFile)
     siteName = list(df.iloc[:,0])
-    velList = sorted(glob.glob(workdir+'/*/*/mintpy/*_*_UP_bootVel_msk.h5'))
+    velList = sorted(glob.glob(workdir+'/*/*/mintpy/'+velFile))
     print(velList)
     MidasVel = pd.read_csv(Velfile_name,header=None, delimiter=r"\s+")
 
+
     for i in range(len(velList)):
         siteName = velList[i].split('/')[-1][0:4]
-        print(MidasVel[MidasVel[0].str.contains(siteName)][10])
+        tsDuration = np.float(MidasVel[MidasVel[0].str.contains(siteName)][4])
+        dataPointNo = np.float(MidasVel[MidasVel[0].str.contains(siteName)][6])
+        endDate = np.float(MidasVel[MidasVel[0].str.contains(siteName)][3])
+        print('**************************************************************')
+        print('Working on:',siteName,'Timeseries end date:',endDate,'Timeseries duration:',tsDuration,'Number of data points in timeseries:',dataPointNo)
+        if tsDuration < 3. or dataPointNo < 100.:
+            print(siteName,'timeseries length is shorter than 3 years or there are less than 100 data points...skipping the station')
+            continue
+        elif endDate < 2014.:
+            print(siteName,'timeseries length is over 3 years, there are more than 100 data points but the end date is before 2014...using the station')
+
         velGPS = np.float32(MidasVel[MidasVel[0].str.contains(siteName)][10])[0]
         stdGPS = np.float32(MidasVel[MidasVel[0].str.contains(siteName)][13])[0]
         print(siteName,velGPS,stdGPS)
@@ -512,9 +523,14 @@ def mergeGPS(csvFile,workdir):
         outdirList = velList[i].split('/')[0:-1]
         outdir = os.path.join(*outdirList)
         velName = velList[i].split('/')[-1]
-        index = velName.find('bootVel_msk.h5')
-        outFileName = os.path.abspath(os.path.join(outdir,velName[:index]+'GPSadded_'+velName[index:]))
+        index = velName.find('.h5')
+        outFileName = os.path.abspath(os.path.join(outdir,velName[:index]+'_GPSadded'+velName[index:]))
         writefile.write(datasetDict=dsDict, out_file=outFileName, metadata=atr)
+
+        ##Mask new velocity file with spatial coherence
+        print('Mask new velocity file with spatial coherence')
+        subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=outdir)
+        subprocess.run(['mask.py',outFileName,'-m','maskSpatialCoh.h5'],cwd=outdir)
 
 
 
