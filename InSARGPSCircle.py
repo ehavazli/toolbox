@@ -40,6 +40,10 @@ def createParser():
     parser.add_argument('-s', '--step', dest='step', default='all', help='Choose step to do (all steps are run from scracth if no step is given) [generateMask,download,tsSetup,prepAria,timeseries,bootStrap,dloadGPS,mergeGPSup,skipdownload]')
     parser.add_argument('-t', '--temp', dest='template', default='smallbaselineApp.cfg',help='MintPy template file to used for time series processing')
     parser.add_argument('-ts', '--timeseries', dest='timeseriesFile',default='timeseries_ERA5_demErr.h5',help='MintPy timeseries file for bootstrapping')
+    parser.add_argument('-tsm', '--ts-modify', dest='tsModify',default=False,help='Modify timeseries network modification (True/False)')
+    parser.add_argument('-ts-base', '--timeseriesBase', dest='maxtbase',help='MintPy timeseries network modification temporal baseline minimum')
+
+
     return parser
 
 def cmdLineParse(iargs = None):
@@ -202,8 +206,8 @@ def prepAria(csvFile,templateFile,workdir):
         siteLoc = os.path.abspath(os.path.join(workdir,siteName[i]))
         if 'DEM' not in list(os.walk(siteLoc))[0][1]:
             trackDirList = list(os.walk(siteLoc))[0][1]
-        # else:
-        #     trackDirList = siteLoc
+        else:
+             trackDirList = siteLoc
 
         for x in trackDirList:
             try:
@@ -236,7 +240,7 @@ def prepAria(csvFile,templateFile,workdir):
             # print('Running: ','reference_point.py',ifgramFile,'--lat',latList[i],'--lon',lonList[i])
             # subprocess.run(['reference_point.py',ifgramFile,'--lat',str(latList[i]),'--lon',str(lonList[i])])
 
-def timeseries(csvFile,templateFile,workdir):
+def timeseries(csvFile,templateFile,workdir,modify=False,maxtbase=180):
     print('ACTIVATE YOUR MINTPY ENVIRONMENT BEFORE RUNNING THIS STEP')
     print('Run MintPy processing')
     df = pd.read_csv(csvFile)
@@ -254,7 +258,10 @@ def timeseries(csvFile,templateFile,workdir):
             try:
                 siteDir = os.path.join(siteLoc,x)
                 mintpyDir = os.path.join(siteDir,'mintpy')
-                subprocess.run(['smallbaselineApp.py',template],cwd=mintpyDir)
+                if modify == True:
+                    subprocess.run(['modify_network.py','inputs/ifgramStack.h5','--max-tbase',maxtbase],cwd=mintpyDir)
+                else:
+                    subprocess.run(['smallbaselineApp.py',template],cwd=mintpyDir)
             except FileNotFoundError:
                 print('No mintpy folder under:',siteDir)
 
@@ -333,11 +340,6 @@ def bootStrap(csvFile,timeseriesFile,workdir):
         except:
             print('No track folder found under:',siteLoc)
 
-        # if 'DEM' not in list(os.walk(siteLoc))[0][1]:
-        #     trackDirList = list(os.walk(siteLoc))[0][1]
-        # else:
-        #     trackDirList = siteLoc
-
         for x in trackDirList:
             try:
                 siteDir = os.path.join(siteLoc,x)
@@ -375,12 +377,39 @@ def bootStrap(csvFile,timeseriesFile,workdir):
 
                 ##Mask new velocity file with spatial coherence
                 print('Mask new velocity file with spatial coherence')
-                subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=mintpyDir)
-                subprocess.run(['mask.py',siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel_refCircle.h5','-m','maskSpatialCoh.h5'],cwd=mintpyDir)
+                #subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=mintpyDir)
+                subprocess.run(['mask.py',siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel_refCircle.h5','-m','maskTempCoh.h5'],cwd=mintpyDir)
 
             except:
                 print('No mintpy folder under:',siteDir)
 
+def filterTS(csvFile,timeseriesFile,workdir):
+    print('ACTIVATE YOUR MINTPY ENVIRONMENT BEFORE RUNNING THIS STEP')
+    from mintpy.utils import readfile, writefile
+    df = pd.read_csv(csvFile)
+    siteName = list(df.iloc[:,0])
+    lonList = list(df.iloc[:,1])
+    latList = list(df.iloc[:,2])
+
+    for i in range(len(siteName)):
+        print('**************************************************************')
+        print('Working on:',siteName[i])
+        siteLoc = os.path.abspath(os.path.join(workdir,siteName[i]))
+        try:
+            trackDirList = list(os.walk(siteLoc))[0][1]
+        except:
+            print('No track folder found under:',siteLoc)
+
+        for x in trackDirList:
+            try:
+                siteDir = os.path.join(siteLoc,x)
+                mintpyDir = os.path.join(siteDir,'mintpy')
+                # print('reference_point.py',timeseriesFile,'--lat',str(latList[i]),'--lon',str(lonList[i]))
+                print('Filtering timeseries:',timeseriesFile)
+                subprocess.run(['spatial_filter.py',timeseriesFile,'-o',timeseriesFile[0:-3]+'_filtered.h5'],cwd=mintpyDir)
+            except:
+                print('No mintpy folder under:',siteDir)
+ 
 # def mergeGPS(csvFile,workdir,GPSdataDir='./GPS'):
 #     from mintpy.objects.gps import GPS
 #     from mintpy.utils import readfile, writefile
@@ -529,8 +558,8 @@ def mergeGPS(csvFile,workdir,velFile='*UP_bootVel_refCircle.h5'):
 
         ##Mask new velocity file with spatial coherence
         print('Mask new velocity file with spatial coherence')
-        subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=outdir)
-        subprocess.run(['mask.py',outFileName,'-m','maskSpatialCoh.h5'],cwd=outdir)
+        #subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=outdir)
+        subprocess.run(['mask.py',outFileName,'-m','maskTempCoh.h5'],cwd=outdir)
 
 
 
@@ -586,9 +615,11 @@ def main(inps=None):
     elif inps.step == 'prepAria':
         prepAria(inps.csvFile,inps.template,inps.workdir)
     elif inps.step == 'timeseries':
-        timeseries(inps.csvFile,inps.template,inps.workdir)
+        timeseries(inps.csvFile,inps.template,inps.workdir,inps.tsModify,inps.maxtbase)
     elif inps.step == 'bootStrap':
         bootStrap(inps.csvFile,inps.timeseriesFile,inps.workdir)
+    elif inps.step == 'filterTS':
+        filterTS(inps.csvFile,inps.timeseriesFile,inps.workdir)
     elif inps.step == 'mergeGPS':
         mergeGPS(inps.csvFile,inps.workdir)
     elif inps.step == 'copyTS':
