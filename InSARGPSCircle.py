@@ -175,13 +175,10 @@ def ARIAtsSetup(csvFile,workdir,*args):
     siteName = list(df.iloc[:,0])
     prodDir = os.path.join(os.path.abspath(workdir),'products')
 
-    try:
-        trackDirList
-    except UnboundLocalError:
-        trackDirList = []
-        for x in range(len(list(os.walk(prodDir))[0][1])):
-            trackDirList.append(os.path.join(os.path.abspath(prodDir),list(os.walk(prodDir))[0][1][x]))
-        print('trackDirList: ',trackDirList)
+    trackDirList = []
+    for x in range(len(list(os.walk(prodDir))[0][1])):
+        trackDirList.append(os.path.join(os.path.abspath(prodDir),list(os.walk(prodDir))[0][1][x]))
+    print('trackDirList: ',trackDirList)
 
     for i in siteName:
         for j in trackDirList:
@@ -190,8 +187,8 @@ def ARIAtsSetup(csvFile,workdir,*args):
             print('Working in: ',siteDir)
             mask = os.path.abspath(os.path.join(workdir,i,i+'.geojson'))
             products = os.path.join(os.path.abspath(prodDir),trackNo,'*.nc')
-            print('Running: ','ariaTSsetup.py','-f',"'{0}'".format(products),'--mask','download','--bbox',mask,'-w',siteDir)
-            subprocess.run(['ariaTSsetup.py','-f',products,'--mask','download','--bbox',mask,'-w',siteDir])
+            print('Running: ','ariaTSsetup.py','-f',"'{0}'".format(products),'--mask','download','--bbox',mask,'-ml','2','-w',siteDir)
+            subprocess.run(['ariaTSsetup.py','-f',products,'--mask','download','--bbox',mask,'-ml','2','-w',siteDir])
             print('Finished time series setup for: ',i)
     return trackDirList
 
@@ -377,13 +374,13 @@ def bootStrap(csvFile,timeseriesFile,workdir):
 
                 ##Mask new velocity file with spatial coherence
                 print('Mask new velocity file with spatial coherence')
-                #subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=mintpyDir)
-                subprocess.run(['mask.py',siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel_refCircle.h5','-m','maskTempCoh.h5'],cwd=mintpyDir)
+                subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=mintpyDir)
+                subprocess.run(['mask.py',siteDir+'/mintpy/'+siteName[i]+'_'+x+'_UP_bootVel_refCircle.h5','-m','maskSpatialCoh.h5'],cwd=mintpyDir)
 
             except:
                 print('No mintpy folder under:',siteDir)
 
-def filterTS(csvFile,timeseriesFile,workdir):
+def filterTSspace(csvFile,timeseriesFile,workdir):
     print('ACTIVATE YOUR MINTPY ENVIRONMENT BEFORE RUNNING THIS STEP')
     from mintpy.utils import readfile, writefile
     df = pd.read_csv(csvFile)
@@ -406,7 +403,34 @@ def filterTS(csvFile,timeseriesFile,workdir):
                 mintpyDir = os.path.join(siteDir,'mintpy')
                 # print('reference_point.py',timeseriesFile,'--lat',str(latList[i]),'--lon',str(lonList[i]))
                 print('Filtering timeseries:',timeseriesFile)
-                subprocess.run(['spatial_filter.py',timeseriesFile,'-o',timeseriesFile[0:-3]+'_filtered.h5'],cwd=mintpyDir)
+                subprocess.run(['spatial_filter.py',timeseriesFile,'-o',timeseriesFile[0:-3]+'_SpaceFiltered.h5'],cwd=mintpyDir)
+            except:
+                print('No mintpy folder under:',siteDir)
+
+def filterTStime(csvFile,timeseriesFile,workdir):
+    print('ACTIVATE YOUR MINTPY ENVIRONMENT BEFORE RUNNING THIS STEP')
+    from mintpy.utils import readfile, writefile
+    df = pd.read_csv(csvFile)
+    siteName = list(df.iloc[:,0])
+    lonList = list(df.iloc[:,1])
+    latList = list(df.iloc[:,2])
+
+    for i in range(len(siteName)):
+        print('**************************************************************')
+        print('Working on:',siteName[i])
+        siteLoc = os.path.abspath(os.path.join(workdir,siteName[i]))
+        try:
+            trackDirList = list(os.walk(siteLoc))[0][1]
+        except:
+            print('No track folder found under:',siteLoc)
+
+        for x in trackDirList:
+            try:
+                siteDir = os.path.join(siteLoc,x)
+                mintpyDir = os.path.join(siteDir,'mintpy')
+                # print('reference_point.py',timeseriesFile,'--lat',str(latList[i]),'--lon',str(lonList[i]))
+                print('Filtering timeseries:',timeseriesFile)
+                subprocess.run(['temporal_filter.py',timeseriesFile,'-o',timeseriesFile[0:-3]+'_TimeFiltered.h5'],cwd=mintpyDir)
             except:
                 print('No mintpy folder under:',siteDir)
  
@@ -558,8 +582,8 @@ def mergeGPS(csvFile,workdir,velFile='*UP_bootVel_refCircle.h5'):
 
         ##Mask new velocity file with spatial coherence
         print('Mask new velocity file with spatial coherence')
-        #subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=outdir)
-        subprocess.run(['mask.py',outFileName,'-m','maskTempCoh.h5'],cwd=outdir)
+        subprocess.run(['generate_mask.py','avgSpatialCoh.h5','-m','0.7','--base','waterMask.h5','-o','maskSpatialCoh.h5'],cwd=outdir)
+        subprocess.run(['mask.py',outFileName,'-m','maskSpatialCoh.h5'],cwd=outdir)
 
 
 
@@ -618,8 +642,10 @@ def main(inps=None):
         timeseries(inps.csvFile,inps.template,inps.workdir,inps.tsModify,inps.maxtbase)
     elif inps.step == 'bootStrap':
         bootStrap(inps.csvFile,inps.timeseriesFile,inps.workdir)
-    elif inps.step == 'filterTS':
-        filterTS(inps.csvFile,inps.timeseriesFile,inps.workdir)
+    elif inps.step == 'filterTSspace':
+        filterTSspace(inps.csvFile,inps.timeseriesFile,inps.workdir)
+    elif inps.step == 'filterTStime':
+        filterTStime(inps.csvFile,inps.timeseriesFile,inps.workdir)
     elif inps.step == 'mergeGPS':
         mergeGPS(inps.csvFile,inps.workdir)
     elif inps.step == 'copyTS':
