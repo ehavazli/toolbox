@@ -20,10 +20,10 @@ def create_parser():
 
     parser = argparse.ArgumentParser(description='Generate a csv file from UNR MIDAS velocities and locations')
     parser.add_argument('-loc', '--locfile', dest='locationFile',default='http://geodesy.unr.edu/NGLStationPages/llh.out',
-                                type=str, help='Web link to the file with lat/lon info')
+                                type=str, help='Web link to the file with lat/lon info, default: http://geodesy.unr.edu/NGLStationPages/llh.out')
     parser.add_argument('-vel', '--velfile', dest='velocityFile',default='http://geodesy.unr.edu/velocities/midas.IGS14.txt',
-                                type=str, help='Web link to the file with MIDAS velocities')
-    parser.add_argument('-o', '--outfile', dest='outFile',default='MIDASVelLoc.csv', type=str, help='Output file name')
+                                type=str, help='Web link to the file with MIDAS velocities, default: http://geodesy.unr.edu/velocities/midas.IGS14.txt')
+    parser.add_argument('-o', '--outfile', dest='outFile',default='MIDASVelLoc.csv', type=str, help='Output file name, default: MIDASVelLoc.csv')
 
     return parser
 
