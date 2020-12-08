@@ -34,11 +34,11 @@ def main(inps=None):
     h5Vel = h5py.File(inps.velFile,'r')
     h5Out = h5py.File(inps.outName, 'w')
 
-    Inc = (h5Geo.get('incidenceAngle').value)*(np.pi/180.)
+    inc = h5Geo.get('incidenceAngle')[()]*(np.pi/180.)
     attrs = h5Vel.attrs
 
-    Vset = h5Vel.get('velocity')
-    losU = Vset/(np.cos(Inc))
+    Vlos = h5Vel.get('velocity')[()]
+    losU = Vlos/(np.cos(inc))
     dset = h5Out.create_dataset('velocity', data=losU)
 
     for key, value in h5Vel.attrs.items():
