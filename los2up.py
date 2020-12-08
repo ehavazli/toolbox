@@ -46,6 +46,7 @@ def main(inps=None):
     h5Out.close()
     h5Geo.close()
     h5Vel.close()
+    print("File written:",inps.outName)
 ############################################################################
 if __name__ == '__main__':
     main()
